@@ -52,11 +52,36 @@ class PrismOrchestrator:
         base_url = openai_base_url or settings.OPENAI_BASE_URL or "http://localhost:8001/v1"
         api_key = api_key or settings.OPENAI_API_KEY
         core_api = (prism_core_api_base or settings.PRISM_CORE_BASE_URL).rstrip('/')
-        self.monitoring_agent_endpoint = monitoring_agent_endpoint or "http://localhost:8002/api/monitoring"
-        self.prediction_agent_endpoint = prediction_agent_endpoint or "http://localhost:8003/api/prediction"
-        self.autonomous_control_agent_endpoint = autonomous_control_agent_endpoint or "http://localhost:8004/api/autonomous_control"
-        self.platform_api_base = platform_api_base or "http://localhost:8005/api/platform"
-        print(f"🔧 [STEP 3] Endpoints resolved - Core API: {core_api}, Base URL: {base_url}", file=sys.stderr, flush=True)
+        
+        # Set the four endpoints - use settings first, then parameters, then defaults
+        self.monitoring_agent_endpoint = (
+            monitoring_agent_endpoint or 
+            settings.MONITORING_API_ENDPOINT or 
+            "http://localhost:8002/api/monitoring"
+        )
+        self.prediction_agent_endpoint = (
+            prediction_agent_endpoint or 
+            settings.PREDICTION_API_ENDPOINT or 
+            "http://localhost:8003/api/prediction"
+        )
+        self.autonomous_control_agent_endpoint = (
+            autonomous_control_agent_endpoint or 
+            settings.AUTOCONTROL_API_ENDPOINT or 
+            "http://localhost:8004/api/autonomous_control"
+        )
+        self.platform_api_base = (
+            platform_api_base or 
+            settings.PLATFORM_API_ENDPOINT or 
+            "http://localhost:8005/api/platform"
+        )
+        
+        print(f"🔧 [STEP 3] Endpoints resolved:", file=sys.stderr, flush=True)
+        print(f"   - Core API: {core_api}", file=sys.stderr, flush=True)
+        print(f"   - vLLM API: {base_url}", file=sys.stderr, flush=True)
+        print(f"   - Monitoring Agent: {self.monitoring_agent_endpoint}", file=sys.stderr, flush=True)
+        print(f"   - Prediction Agent: {self.prediction_agent_endpoint}", file=sys.stderr, flush=True)
+        print(f"   - Autonomous Control Agent: {self.autonomous_control_agent_endpoint}", file=sys.stderr, flush=True)
+        print(f"   - Platform API: {self.platform_api_base}", file=sys.stderr, flush=True)
 
         # Initialize managers
         print("🔧 [STEP 4] Initializing managers...", file=sys.stderr, flush=True)
