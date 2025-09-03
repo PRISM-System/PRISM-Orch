@@ -15,8 +15,10 @@ from prism_core.core.tools import BaseTool, ToolRequest, ToolResponse, ToolRegis
 
 from .tools.orch_tool_setup import OrchToolSetup
 from prism_core.core.agents import AgentManager, WorkflowManager
-
+from .endpoint_schemas import MonitoringAgentRequest, MonitoringAgentResponse, PredictionAgentRequest, PredictionAgentResponse, AutonomousControlAgentRequest, AutonomousControlAgentResponse, PlatformBaseRequest, PlatformBaseResponse
 from ..core.config import settings
+
+import sys
 
 
 class PrismOrchestrator:
@@ -34,7 +36,12 @@ class PrismOrchestrator:
                  agent_name: str = "orchestration_agent",
                  openai_base_url: Optional[str] = None,
                  api_key: Optional[str] = None,
-                 prism_core_api_base: Optional[str] = None) -> None:
+                 prism_core_api_base: Optional[str] = None,
+                 platform_api_base: Optional[str] = None,
+                 monitoring_agent_endpoint: Optional[str] = None,
+                 prediction_agent_endpoint: Optional[str] = None,
+                 autonomous_control_agent_endpoint: Optional[str] = None,
+                 ) -> None:
         import sys
         print("🔧 [STEP 1] Starting PrismOrchestrator initialization...", file=sys.stderr, flush=True)
         
@@ -45,6 +52,10 @@ class PrismOrchestrator:
         base_url = openai_base_url or settings.OPENAI_BASE_URL or "http://localhost:8001/v1"
         api_key = api_key or settings.OPENAI_API_KEY
         core_api = (prism_core_api_base or settings.PRISM_CORE_BASE_URL).rstrip('/')
+        self.monitoring_agent_endpoint = monitoring_agent_endpoint or "http://localhost:8002/api/monitoring"
+        self.prediction_agent_endpoint = prediction_agent_endpoint or "http://localhost:8003/api/prediction"
+        self.autonomous_control_agent_endpoint = autonomous_control_agent_endpoint or "http://localhost:8004/api/autonomous_control"
+        self.platform_api_base = platform_api_base or "http://localhost:8005/api/platform"
         print(f"🔧 [STEP 3] Endpoints resolved - Core API: {core_api}, Base URL: {base_url}", file=sys.stderr, flush=True)
 
         # Initialize managers
@@ -123,10 +134,11 @@ class PrismOrchestrator:
         print(f"   - Prism-Core API: {core_api}")
         print(f"   - vLLM API: {base_url}")
         
-        # Initialize orchestration pipeline
-        print("🔧 [STEP 13] Starting orchestration pipeline setup...")
-        self._setup_orchestration_pipeline()
-        print("🔧 [STEP 13.1] Orchestration pipeline setup completed")
+        # Initialize sub-agents
+        print("🔧 [STEP 14] Starting sub-agents initialization...")
+        self._initialize_sub_agents()
+        print("🔧 [STEP 14.1] Sub-agents initialization completed")
+        
         
         print("🔧 [FINAL] PrismOrchestrator initialization completed successfully!")
 
@@ -172,468 +184,96 @@ class PrismOrchestrator:
             # 자율제어 에이전트 초기화
             self._initialize_autonomous_control_agent()
             print("🔧 [STEP 13-1-6] Autonomous control agent initialized", file=sys.stderr, flush=True)
+
+            print("🔧 [STEP 13-1-7] Starting platform base setup...", file=sys.stderr, flush=True)
+            # 플랫폼 파이프라인 설정
+            self._setup_platform_base()
+            print("🔧 [STEP 13-1-8] Platform base setup completed", file=sys.stderr, flush=True)
             
             print("✅ 하위 에이전트 초기화 완료")
             
         except Exception as e:
             print(f"❌ 하위 에이전트 초기화 실패: {str(e)}", file=sys.stderr, flush=True)
-
-
-
-    def _initialize_monitoring_agent(self) -> None:
-        """모니터링 에이전트를 초기화합니다."""
-        try:
-            # Pseudo method: 실제 API endpoint가 정해지면 여기서 초기화
-            monitoring_config = {
-                "agent_id": "monitoring_agent",
-                "endpoint": "http://localhost:8002/api/monitoring",  # 예시 endpoint
-                "capabilities": [
-                    "anomaly_detection",
-                    "future_anomaly_prediction", 
-                    "sensor_data_analysis",
-                    "process_monitoring"
-                ],
-                "status": "initialized"
-            }
-            
-            # 에이전트 등록
-            agent = Agent(
-                name="monitoring_agent",
-                description="사용자의 요청에 맞추어 특정 공정/기계/센서 등의 정보를 DB에서 산출하여 이상치 여부를 탐지하고, 미래 이상치 발생 가능성이 높은 부분을 알려줌",
-                role_prompt="""당신은 산업 현장의 모니터링 전문가입니다.
-
-**주요 역할:**
-1. 특정 공정/기계/센서의 실시간 데이터 분석
-2. 이상치 탐지 및 알림
-3. 미래 이상치 발생 가능성 예측
-4. 데이터베이스에서 관련 정보 산출
-
-**처리 가능한 요청:**
-- 특정 센서의 이상치 탐지
-- 공정 상태 모니터링
-- 미래 고장 가능성 분석
-- 센서 데이터 품질 검증
-
-**출력 형식:**
-{
-    "current_status": {
-        "anomaly_detected": true/false,
-        "anomaly_type": "sensor_failure/process_anomaly/etc",
-        "severity": "low/medium/high/critical",
-        "affected_components": ["component1", "component2"]
-    },
-    "future_prediction": {
-        "anomaly_probability": 0.0-1.0,
-        "predicted_time": "YYYY-MM-DD HH:MM:SS",
-        "confidence": 0.0-1.0,
-        "recommended_actions": ["action1", "action2"]
-    },
-    "data_summary": {
-        "total_data_points": 1000,
-        "anomaly_count": 5,
-        "data_quality": "excellent/good/fair/poor"
-    }
-}""",
-                tools=[]
-            )
-            
-            # 에이전트 등록 (로컬 + 원격)
-            self.agent_manager.register_agent(agent)
-            
-            # 원격 등록
-            success = self.llm.register_agent(agent)
-            if success:
-                print(f"✅ 모니터링 에이전트 '{agent.name}' 원격 등록 완료")
-            else:
-                print(f"⚠️ 모니터링 에이전트 '{agent.name}' 원격 등록 실패")
-            
-            self._monitoring_agent_config = monitoring_config
-            
-            print(f"✅ 모니터링 에이전트 초기화 완료: {monitoring_config['agent_id']}")
-            
-        except Exception as e:
-            print(f"❌ 모니터링 에이전트 초기화 실패: {str(e)}")
-
-    def _initialize_prediction_agent(self) -> None:
-        """예측 에이전트를 초기화합니다."""
-        try:
-            # Pseudo method: 실제 API endpoint가 정해지면 여기서 초기화
-            prediction_config = {
-                "agent_id": "prediction_agent",
-                "endpoint": "http://localhost:8003/api/prediction",  # 예시 endpoint
-                "capabilities": [
-                    "time_series_prediction",
-                    "anomaly_prediction",
-                    "trend_analysis",
-                    "forecasting"
-                ],
-                "status": "initialized"
-            }
-            
-            # 에이전트 등록
-            agent = Agent(
-                name="prediction_agent",
-                description="사용자의 요청에 맞추어 특정 공정/기계/센서의 미래 변화를 예측하고 이상치 발생 가능성이 높은 부분을 알려줌",
-                role_prompt="""당신은 산업 현장의 예측 분석 전문가입니다.
-
-**주요 역할:**
-1. 특정 공정/기계/센서의 미래 변화 예측
-2. 이상치 발생 가능성 분석
-3. 시계열 데이터 분석 및 트렌드 예측
-4. 예측 모델 기반 인사이트 제공
-
-**처리 가능한 요청:**
-- 센서 값 미래 예측
-- 고장 시점 예측
-- 성능 저하 예측
-- 최적 운영 조건 예측
-
-**출력 형식:**
-{
-    "prediction_results": {
-        "target_variable": "sensor_name",
-        "prediction_horizon": "24h/7d/30d",
-        "predicted_values": [
-            {"timestamp": "2024-01-01 12:00:00", "value": 25.5, "confidence": 0.95},
-            {"timestamp": "2024-01-01 13:00:00", "value": 26.2, "confidence": 0.93}
-        ],
-        "anomaly_probability": 0.15,
-        "trend": "increasing/decreasing/stable"
-    },
-    "model_info": {
-        "model_type": "LSTM/Prophet/ARIMA",
-        "accuracy": 0.92,
-        "last_training": "2024-01-01 00:00:00"
-    },
-    "recommendations": [
-        "예측 결과에 따른 권장사항 1",
-        "예측 결과에 따른 권장사항 2"
-    ]
-}""",
-                tools=[]
-            )
-            
-            # 에이전트 등록 (로컬 + 원격)
-            self.agent_manager.register_agent(agent)
-            
-            # 원격 등록
-            success = self.llm.register_agent(agent)
-            if success:
-                print(f"✅ 예측 에이전트 '{agent.name}' 원격 등록 완료")
-            else:
-                print(f"⚠️ 예측 에이전트 '{agent.name}' 원격 등록 실패")
-            
-            self._prediction_agent_config = prediction_config
-            
-            print(f"✅ 예측 에이전트 초기화 완료: {prediction_config['agent_id']}")
-            
-        except Exception as e:
-            print(f"❌ 예측 에이전트 초기화 실패: {str(e)}")
-
-    def _initialize_autonomous_control_agent(self) -> None:
-        """자율제어 에이전트를 초기화합니다."""
-        try:
-            # Pseudo method: 실제 API endpoint가 정해지면 여기서 초기화
-            control_config = {
-                "agent_id": "autonomous_control_agent",
-                "endpoint": "http://localhost:8004/api/control",  # 예시 endpoint
-                "capabilities": [
-                    "parameter_optimization",
-                    "control_recommendation",
-                    "setpoint_adjustment",
-                    "autonomous_decision"
-                ],
-                "status": "initialized"
-            }
-            
-            # 에이전트 등록
-            agent = Agent(
-                name="autonomous_control_agent",
-                description="사용자의 요청에 맞추어 이상치 발생이 가능하거나 출력을 조절하고 싶은 센서의 값을 예측 에이전트의 예측 모델들을 이용하여 최종 추천 파라미터 제공",
-                role_prompt="""당신은 산업 현장의 자율제어 전문가입니다.
-
-**주요 역할:**
-1. 예측 모델 기반 최적 파라미터 추천
-2. 이상치 방지를 위한 제어 파라미터 조정
-3. 센서 출력 최적화
-4. 자율적 의사결정 및 제어 권장
-
-**처리 가능한 요청:**
-- 센서 출력 조절 파라미터 추천
-- 이상치 방지 제어 전략
-- 최적 운영 조건 설정
-- 자동 제어 파라미터 최적화
-
-**출력 형식:**
-{
-    "control_recommendations": {
-        "target_system": "system_name",
-        "current_parameters": {
-            "param1": 25.0,
-            "param2": 60.0
-        },
-        "recommended_parameters": {
-            "param1": 26.5,
-            "param2": 58.0
-        },
-        "adjustment_reason": "anomaly_prevention/optimization",
-        "expected_improvement": "15% reduction in anomaly probability"
-    },
-    "control_strategy": {
-        "strategy_type": "preventive/corrective/optimization",
-        "implementation_steps": [
-            "Step 1: 현재 파라미터 백업",
-            "Step 2: 새로운 파라미터 적용",
-            "Step 3: 모니터링 시작"
-        ],
-        "safety_checks": ["check1", "check2"]
-    },
-    "risk_assessment": {
-        "risk_level": "low/medium/high",
-        "potential_issues": ["issue1", "issue2"],
-        "mitigation_measures": ["measure1", "measure2"]
-    }
-}""",
-                tools=[]
-            )
-            
-            # 에이전트 등록 (로컬 + 원격)
-            self.agent_manager.register_agent(agent)
-            
-            # 원격 등록
-            success = self.llm.register_agent(agent)
-            if success:
-                print(f"✅ 자율제어 에이전트 '{agent.name}' 원격 등록 완료")
-            else:
-                print(f"⚠️ 자율제어 에이전트 '{agent.name}' 원격 등록 실패")
-            
-            self._autonomous_control_agent_config = control_config
-            
-            print(f"✅ 자율제어 에이전트 초기화 완료: {control_config['agent_id']}")
-            
-        except Exception as e:
-            print(f"❌ 자율제어 에이전트 초기화 실패: {str(e)}")
-
     # Pseudo methods for sub-agent API calls
-    async def _call_monitoring_agent(self, request_text: str) -> str:
-        """모니터링 에이전트 API 호출 (Pseudo method)"""
+    async def _call_monitoring_agent(self, task_id: str, request_text: str) -> MonitoringAgentResponse:
+        """
+        모니터링 에이전트 호출
+        사용 엔드포인트 목록
+            - /api/v1/workflow/start: 모니터링 에이전트 워크플로우 시작
+                request body:{'taskId': 'TASK_0001', 'query': str}
+                response body: {"result": str}
+        """
+        try:
+            requests.post(self.monitoring_agent_endpoint, 
+                                        json={"taskId": task_id, "query": request_text})
+        except Exception as e:
+            print(f"❌ 모니터링 에이전트 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
+            return MonitoringAgentResponse(result="모니터링 에이전트 자동화 테스트 중")
+    
+    
+
+    async def _call_prediction_agent(self, task_id: str, request_text: str) -> PredictionAgentResponse:
+        """예측 에이전트 호출
+        사용 엔드포인트 목록
+            - /api/v1/workflow/start: 예측 에이전트 워크플로우 시작
+                request body:{'taskId': 'TASK_0001', 'query': str}
+                response body: {"result": str}
+        """
         try:
             # 실제 구현에서는 HTTP 요청으로 변경
-            # response = requests.post(self._monitoring_agent_config["endpoint"], 
-            #                         json={"prompt": request_text, "user_id": "orchestrator"})
+            response = requests.post(self.prediction_agent_endpoint, 
+                                    json={"taskId": task_id, "query": request_text})
+        except:
+            response = PredictionAgentResponse(result="예측 에이전트 자동화 테스트 중")
             
-            # Pseudo response - 풍부한 텍스트 형태로 응답
-            pseudo_response = f"""
-# 모니터링 분석 결과
+            return response
 
-## 현재 상태 분석
-현재 분석 대상 시스템의 상태를 종합적으로 점검한 결과, **이상치는 발견되지 않았습니다**. 모든 주요 센서들이 정상 범위 내에서 작동하고 있으며, 시스템 안정성이 확보된 상태입니다.
-
-### 주요 센서 상태
-- **온도 센서**: 24.5°C (정상 범위: 20-30°C)
-- **압력 센서**: 2.1 bar (정상 범위: 1.8-2.5 bar)
-- **유량 센서**: 150 L/min (정상 범위: 140-160 L/min)
-- **진동 센서**: 0.8 mm/s (정상 범위: 0-1.2 mm/s)
-
-### 데이터 품질 평가
-- **총 데이터 포인트**: 1,000개
-- **이상치 개수**: 2개 (0.2% - 매우 낮은 수준)
-- **데이터 품질**: 우수 (신뢰도 95%)
-- **마지막 업데이트**: {self._get_timestamp()}
-
-## 미래 예측 분석
-향후 24시간 동안의 시스템 상태를 예측한 결과, **이상치 발생 확률은 10%**로 낮은 수준입니다.
-
-### 예측 상세 정보
-- **예측 시점**: 2024-01-15 14:30:00
-- **신뢰도**: 85%
-- **주요 관찰사항**: 온도가 점진적으로 상승하는 추세가 관찰되나, 정상 범위 내에서의 변화입니다.
-
-## 권장 조치사항
-1. **정기 점검 수행**: 다음 정기 점검 일정을 준수하여 시스템 상태를 지속적으로 모니터링
-2. **센서 교정 검토**: 온도 센서의 교정 상태를 다음 달에 재검토
-3. **데이터 백업**: 현재 정상 상태의 데이터를 백업하여 향후 비교 분석에 활용
-
-## 추가 모니터링 필요 사항
-- 온도 상승 추세 지속 관찰
-- 압력 변동 패턴 분석
-- 주기적 진동 데이터 검토
-
----
-*분석 수행: 모니터링 에이전트 | 생성 시간: {self._get_timestamp()}*
-"""
-            
-            return pseudo_response
-            
-        except Exception as e:
-            return f"모니터링 에이전트 호출 중 오류가 발생했습니다: {str(e)}"
-
-    async def _call_prediction_agent(self, request_text: str) -> str:
-        """예측 에이전트 API 호출 (Pseudo method)"""
+    async def _call_autonomous_control_agent(self, task_id: str, request_text: str) -> AutonomousControlAgentResponse:
+        """자율제어 에이전트 호출
+        사용 엔드포인트 목록
+            - /api/v1/workflow/start: 자율제어 에이전트 워크플로우 시작
+                request body:{'taskId': 'TASK_0001', 'query': str}
+                response body: {"result": str}
+        """
         try:
             # 실제 구현에서는 HTTP 요청으로 변경
-            # response = requests.post(self._prediction_agent_config["endpoint"], 
-            #                         json={"prompt": request_text, "user_id": "orchestrator"})
+            response = requests.post(self.autonomous_control_agent_endpoint, 
+                                    json={"taskId": task_id, "query": request_text})
+        except:
+            response = AutonomousControlAgentResponse(result="자율제어 에이전트 자동화 테스트 중")
             
-            # Pseudo response - 풍부한 텍스트 형태로 응답
-            pseudo_response = f"""
-# 예측 분석 결과
+            return response
 
-## 예측 모델 정보
-**모델 타입**: LSTM (Long Short-Term Memory)
-**모델 정확도**: 92%
-**마지막 학습**: 2024-01-01 00:00:00
-**예측 기간**: 24시간
-
-## 예측 대상 센서
-**센서명**: 온도 센서 (TEMP-001)
-**현재 값**: 25.5°C
-**예측 단위**: 시간별
-
-## 미래 예측 값
-| 시간 | 예측값 | 신뢰도 | 상태 |
-|------|--------|--------|------|
-| 2024-01-02 12:00 | 25.5°C | 95% | 정상 |
-| 2024-01-02 13:00 | 26.2°C | 93% | 정상 |
-| 2024-01-02 14:00 | 26.8°C | 90% | 주의 |
-| 2024-01-02 15:00 | 27.1°C | 88% | 주의 |
-| 2024-01-02 16:00 | 27.3°C | 85% | 경계 |
-
-## 트렌드 분석
-**전체 트렌드**: 상승 추세
-**변화율**: 시간당 평균 0.4°C 상승
-**예상 최고값**: 27.5°C (2024-01-02 18:00)
-**정상 범위**: 20-30°C
-
-## 이상치 발생 가능성
-**이상치 발생 확률**: 15%
-**주요 위험 요소**:
-- 온도 상승 속도가 평균보다 빠름
-- 냉각 시스템 부하 증가 가능성
-- 주변 환경 온도 상승 영향
-
-## 모델 신뢰도 평가
-- **데이터 품질**: 우수 (95%)
-- **모델 성능**: 안정적 (92% 정확도)
-- **예측 신뢰도**: 높음 (평균 90%)
-
-## 권장사항
-1. **냉각 시스템 점검**: 온도 상승 추세에 대비하여 냉각 시스템 상태 점검
-2. **부하 분산**: 가능한 경우 일부 부하를 다른 시스템으로 분산
-3. **모니터링 강화**: 2시간마다 온도 변화 추이 확인
-4. **비상 대응 준비**: 온도가 28°C를 초과할 경우 비상 냉각 시스템 가동 준비
-
-## 예측 한계 및 주의사항
-- 외부 환경 변화(날씨, 전력 공급 등)에 따른 예측 정확도 변동 가능
-- 급격한 시스템 변경 시 예측 모델 재학습 필요
-- 예측 결과는 참고 자료이며, 실제 운영 결정은 종합적 판단 필요
-
----
-*분석 수행: 예측 에이전트 | 생성 시간: {self._get_timestamp()}*
-"""
-            
-            return pseudo_response
-            
-        except Exception as e:
-            return f"예측 에이전트 호출 중 오류가 발생했습니다: {str(e)}"
-
-    async def _call_autonomous_control_agent(self, request_text: str) -> str:
-        """자율제어 에이전트 API 호출 (Pseudo method)"""
+    async def _call_platform_base(self, session_id: str, step_name: str, content: str, end_time: str, status: str, progress: int) -> PlatformBaseResponse:
+        """플랫폼 기반 호출
+        사용 엔드포인트 목록
+            - /django/api/websocket/orchestrate/update/: 오케스트레이션 상태 전달
+                    {
+                    "session_id": "user_1234_task_940",
+                    "step_name": "monitoring",
+                    "content": "## 🔍 모니터링 완료\n\n**시스템 상태:** 정상\n**검출된 이슈:** 없음",
+                    "end_time": "2025-09-03T10:45:30Z",
+                    "status": "completed",
+                    "progress": 100
+                    }
+        """
+        
         try:
-            # 실제 구현에서는 HTTP 요청으로 변경
-            # response = requests.post(self._autonomous_control_agent_config["endpoint"], 
-            #                         json={"prompt": request_text, "user_id": "orchestrator"})
-            
-            # Pseudo response - 풍부한 텍스트 형태로 응답
-            pseudo_response = f"""
-# 자율제어 권장사항
-
-## 제어 대상 시스템
-**시스템명**: 온도 제어 시스템 (TEMP-CTRL-001)
-**현재 상태**: 정상 운영 중
-**제어 모드**: 자동 제어
-
-## 현재 제어 파라미터
-| 파라미터 | 현재값 | 단위 | 범위 |
-|----------|--------|------|------|
-| Setpoint | 25.0°C | °C | 20-30°C |
-| Deadband | 2.0°C | °C | 1.0-3.0°C |
-| P Gain | 2.5 | - | 1.0-5.0 |
-| I Time | 120s | s | 60-300s |
-| D Time | 30s | s | 10-60s |
-
-## 권장 제어 파라미터
-| 파라미터 | 현재값 | 권장값 | 변경량 | 이유 |
-|----------|--------|--------|--------|------|
-| Setpoint | 25.0°C | 24.5°C | -0.5°C | 온도 상승 추세 대응 |
-| Deadband | 2.0°C | 1.5°C | -0.5°C | 제어 정밀도 향상 |
-| P Gain | 2.5 | 2.8 | +0.3 | 응답 속도 개선 |
-
-## 제어 전략
-**전략 유형**: 예방적 제어 (Preventive Control)
-**적용 이유**: 온도 상승 추세 관찰 및 예측 모델 결과 반영
-**예상 효과**: 온도 변동 20% 감소, 시스템 안정성 향상
-
-## 구현 단계
-### 1단계: 현재 상태 백업 (5분)
-- 현재 제어 파라미터 전체 백업
-- 시스템 상태 스냅샷 저장
-- 롤백 계획 수립
-
-### 2단계: 점진적 파라미터 적용 (15분)
-- Setpoint를 25.0°C → 24.8°C → 24.5°C로 단계적 조정
-- 각 단계마다 5분간 안정화 대기
-- 시스템 응답 관찰 및 기록
-
-### 3단계: 모니터링 및 검증 (30분)
-- 온도 변화 추이 실시간 모니터링
-- 제어 성능 지표 확인
-- 안전성 검증 수행
-
-## 안전성 검증 항목
-- [ ] 온도 범위 검증 (20-30°C 내 유지)
-- [ ] 압력 안전성 확인 (1.8-2.5 bar 유지)
-- [ ] 시스템 응답성 검증
-- [ ] 에너지 효율성 확인
-
-## 위험도 평가
-**전체 위험 수준**: 낮음 (Low Risk)
-**주요 위험 요소**:
-- 일시적 온도 변동 (예상 범위 내)
-- 제어 시스템 부하 증가 (허용 범위 내)
-
-**완화 조치**:
-1. 점진적 파라미터 조정으로 급격한 변화 방지
-2. 실시간 모니터링을 통한 즉시 대응
-3. 자동 롤백 시스템 활성화
-
-## 예상 개선 효과
-- **온도 변동성**: 20% 감소 예상
-- **에너지 효율성**: 5% 향상 예상
-- **시스템 안정성**: 향상
-- **예방 정비 효과**: 이상치 발생 가능성 15% 감소
-
-## 추가 권장사항
-1. **정기 점검**: 주 1회 제어 성능 평가
-2. **모델 업데이트**: 월 1회 예측 모델 재학습
-3. **문서화**: 파라미터 변경 이력 및 효과 분석 보고서 작성
-
-## 비상 대응 계획
-**긴급 상황 발생 시**:
-1. 즉시 이전 파라미터로 롤백
-2. 시스템 상태 긴급 점검
-3. 운영팀에 즉시 보고
-4. 원인 분석 및 대책 수립
-
----
-*분석 수행: 자율제어 에이전트 | 생성 시간: {self._get_timestamp()}*
-"""
-            
-            return pseudo_response
-            
+            requests.post(
+                self.platform_api_base, 
+                json={
+                    "session_id": session_id,
+                    "step_name": step_name, 
+                    "content": content, 
+                    "end_time": end_time, 
+                    "status": status, 
+                    "progress": progress
+                    }
+                    )
         except Exception as e:
-            return f"자율제어 에이전트 호출 중 오류가 발생했습니다: {str(e)}"
-
+            print(f"❌ 플랫폼 기반 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
+        
+        return PlatformBaseResponse(status="success", message="WebSocket update sent")
 
 
     def _define_orchestration_workflow(self) -> None:
@@ -1047,7 +687,7 @@ class PrismOrchestrator:
         extra_body: Optional[Dict[str, Any]] = {"enable_thinking": False}
     ) -> AgentResponse:
         """
-        메인 오케스트레이션 메서드 - 워크플로우 기반 순차 실행
+        메인 오케스트레이션 메서드 - Dynamic Tool Automatic Function Calling 지원
         
         Args:
             prompt: 사용자 요청
@@ -1068,65 +708,268 @@ class PrismOrchestrator:
                 print("⚠️ 에이전트가 등록되지 않았습니다. 다시 등록을 시도합니다.")
                 self.register_orchestration_agent()
 
-            # Prepare context for workflow execution
-            context = {
-                "user_query": prompt,
-                "user_id": user_id,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "timestamp": self._get_timestamp(),
-                "stop": stop,
-                "use_tools": use_tools,
-                "max_tool_calls": max_tool_calls,
-                "extra_body": extra_body
-            }
-
-            # Execute orchestration workflow
             import sys
-            print("🔧 [ORCHESTRATE-1] Starting workflow execution...", file=sys.stderr, flush=True)
-            print(f"🔧 [ORCHESTRATE-2] Context: user_query='{prompt[:50]}...', user_id={user_id}", file=sys.stderr, flush=True)
-            workflow_result = await self.workflow_manager.execute_workflow("orchestration_pipeline", context)
-            print(f"🔧 [ORCHESTRATE-3] Workflow result status: {workflow_result.get('status', 'unknown')}", file=sys.stderr, flush=True)
+            print("🔧 [ORCHESTRATE-1] Starting direct agent invocation with dynamic tools...", file=sys.stderr, flush=True)
+            print(f"🔧 [ORCHESTRATE-2] Context: user_query='{prompt[:50]}...', user_id={user_id}, use_tools={use_tools}", file=sys.stderr, flush=True)
             
-            if workflow_result["status"] == "completed":
-                # Extract final output from workflow result
-                final_step = workflow_result["steps"][-1]
-                final_output = final_step.get("output", {}).get("agent_response", "")
-                
-                # Create AgentResponse
-                response = AgentResponse(
-                    text=final_output,
-                    tools_used=["orchestration_pipeline"],
-                    tool_results=[workflow_result],
-                    metadata={
-                        "workflow_execution_id": workflow_result["execution_id"],
-                        "user_id": user_id,
-                        "prompt": prompt,
-                        "timestamp": self._get_timestamp(),
-                        "workflow_status": "completed"
-                    }
+            # Check if dynamic tools are available
+            if self.orch_tool_setup.is_dynamic_tool_enabled():
+                auto_fc_tools = self.orch_tool_setup.get_automatic_function_calling_tools()
+                print(f"🔧 [ORCHESTRATE-3] Dynamic tools available: {len(auto_fc_tools)}", file=sys.stderr, flush=True)
+                for tool in auto_fc_tools:
+                    print(f"   - {tool['name']}: {tool['description'][:50]}...", file=sys.stderr, flush=True)
+            
+            # Create agent invoke request
+            request = AgentInvokeRequest(
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stop=stop,
+                use_tools=use_tools,
+                max_tool_calls=max_tool_calls,
+                extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                user_id=user_id,
+                tool_for_use=None  # Let the agent decide which tools to use
+            )
+
+            await self._call_platform_base(
+                session_id=user_id, 
+                step_name="Query Refinement", 
+                content="에이전트 오케스트레이션이 시작되어 사용자 질의를 이해하고 있습니다.", 
+                end_time=self._get_timestamp(), 
+                status="running", 
+                progress=0
                 )
-            else:
-                # Handle workflow failure
-                error_msg = workflow_result.get("error", "Unknown workflow error")
-                response = AgentResponse(
-                    text=f"오케스트레이션 워크플로우 실행 중 오류가 발생했습니다: {error_msg}",
-                    tools_used=[],
-                    tool_results=[],
-                    metadata={
-                        "error": error_msg,
-                        "user_id": user_id,
-                        "prompt": prompt,
-                        "timestamp": self._get_timestamp(),
-                        "workflow_status": "failed"
-                    }
+            
+            # Invoke agent directly with automatic function calling
+            print(f"🔧 [ORCHESTRATE-4] Invoking agent with automatic function calling...", file=sys.stderr, flush=True)
+            response = await self.llm.invoke_agent(self._agent, request)
+            print(f"🔧 [ORCHESTRATE-5] Agent response received: tools_used={response.tools_used}", file=sys.stderr, flush=True)
+
+            await self._call_platform_base(
+                session_id=user_id, 
+                step_name="Query Refinement", 
+                content="에이전트 오케스트레이션이 시작되어 사용자 질의를 이해하였습니다. 요청 수행을 위한 오케스트레이션을 시작합니다.", 
+                end_time=self._get_timestamp(), 
+                status="completed", 
+                progress=15
                 )
+            
+            # Update metadata with orchestration info
+            response.metadata.update({
+                "orchestration_mode": "direct_dynamic_tool",
+                "user_id": user_id,
+                "prompt": prompt,
+                "timestamp": self._get_timestamp(),
+                "dynamic_tools_enabled": self.orch_tool_setup.is_dynamic_tool_enabled(),
+                "automatic_function_calling": True
+            })
             
             # Save conversation to memory if user_id is provided
             if user_id and self._memory_tool:
                 await self._save_conversation_to_memory(user_id, prompt, response.text)
             
-            return response
+
+            # make query for monitoring agent
+            monitoring_agent_query = f"""
+            현재 수행 내역을 바탕으로 모니터링 에이전트가 수행해야 할 작업을 결정해주세요.
+            특히 모니터링 에이전트는 현재 시스템들의 상태를 관찰하고 이상치, 이상치 후보, 미래 이상치 발생 가능성이 높은 지점들을 탐지할 예정입니다. 
+            이에 맞추어 모니터링 에이전트가 수행해야 할 작업을 결정해주세요.
+            
+            사용자 요청: {prompt}
+            수행 내역: {response.text}
+            """
+
+
+            await self._call_platform_base(
+                session_id=user_id, 
+                step_name="Monitoring", 
+                content="오케스트레이션 에이전트가 모니터링 에이전트에게 수행해야 할 작업을 결정하고 있습니다.", 
+                end_time=self._get_timestamp(), 
+                status="running", 
+                progress=20
+            )
+            # call monitoring agent
+            monitoring_agent_query_request = AgentInvokeRequest(
+                prompt=monitoring_agent_query,
+                max_tokens=1024,
+                temperature=0.7,
+                stop=None,
+                use_tools=False,
+                max_tool_calls=0,
+                extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                user_id=user_id,
+                tool_for_use=None
+            )
+            monitoring_agent_query = await self.llm.invoke_agent(self._agent, monitoring_agent_query_request)
+            await self._call_platform_base(
+                session_id=user_id, 
+                step_name="Monitoring", 
+                content="오케스트레이션 에이전트가 모니터링 에이전트에게 수행해야 할 작업을 결정했습니다.", 
+                end_time=self._get_timestamp(), 
+                status="completed", 
+                progress=30
+            )
+            monitoring_agent_response = await self._call_monitoring_agent(
+                task_id=user_id,
+                request_text=monitoring_agent_query.text
+            )
+            await self._call_platform_base(
+                session_id=user_id, 
+                step_name="Monitoring", 
+                content="모니터링 에이전트가 수행한 결과를 오케스트레이션 에이전트에게 전달하고 있습니다.", 
+                end_time=self._get_timestamp(), 
+                status="completed", 
+                progress=40
+            )
+            print(f"🔧 [ORCHESTRATE-6] Monitoring agent response received: {monitoring_agent_response}", file=sys.stderr, flush=True)
+            
+            # call prediction agent
+            prediction_agent_query = f"""
+            현재 수행 내역을 바탕으로 예측 에이전트가 수행해야 할 작업을 결정해주세요.
+            특히 예측 에이전트는 현재 시스템들의 상태를 관찰하고 이상치, 이상치 후보, 미래 이상치 발생 가능성이 높은 지점들을 탐지할 예정입니다. 
+            이에 맞추어 예측 에이전트가 수행해야 할 작업을 결정해주세요.
+            
+            사용자 요청: {prompt}
+            수행 내역: {response.text}
+            모니터링 에이전트 수행 결과: {monitoring_agent_response}
+            """
+            await self._call_platform_base(
+                session_id=user_id, 
+                step_name="Prediction", 
+                content="오케스트레이션 에이전트가 예측 에이전트에게 수행해야 할 작업을 결정하고 있습니다.", 
+                end_time=self._get_timestamp(), 
+                status="running", 
+                progress=50
+            )
+            prediction_agent_query_request = AgentInvokeRequest(
+                prompt=prediction_agent_query,
+                max_tokens=1024,
+                temperature=0.7,
+                stop=None,
+                use_tools=False,
+                max_tool_calls=0,
+                extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                user_id=user_id,
+                tool_for_use=None
+            )
+            prediction_agent_query = await self.llm.invoke_agent(self._agent, prediction_agent_query_request)
+            await self._call_platform_base(
+                session_id=user_id, 
+                step_name="Prediction", 
+                content="오케스트레이션 에이전트가 예측 에이전트에게 수행해야 할 작업을 결정했습니다.", 
+                end_time=self._get_timestamp(), 
+                status="completed", 
+                progress=60
+            )
+            prediction_agent_response = await self._call_prediction_agent(
+                task_id=user_id,
+                request_text=prediction_agent_query.text
+            )
+            print(f"🔧 [ORCHESTRATE-7] Prediction agent response received: {prediction_agent_response}", file=sys.stderr, flush=True)
+
+            # call autonomous control agent
+            autonomous_control_agent_query = f"""
+            현재 수행 내역을 바탕으로 자율제어 에이전트가 수행해야 할 작업을 결정해주세요.
+            특히 자율제어 에이전트는 현재 시스템들의 상태를 관찰하고 이상치, 이상치 후보, 미래 이상치 발생 가능성이 높은 지점들을 탐지할 예정입니다. 
+            이에 맞추어 자율제어 에이전트가 수행해야 할 작업을 결정해주세요.
+            
+            사용자 요청: {prompt}
+            수행 내역: {response.text}
+            모니터링 에이전트 수행 결과: {monitoring_agent_response}
+            예측 에이전트 수행 결과: {prediction_agent_response}
+            """
+            await self._call_platform_base(
+                session_id=user_id, 
+                step_name="Autonomous Control", 
+                content="오케스트레이션 에이전트가 자율제어 에이전트에게 수행해야 할 작업을 결정하고 있습니다.", 
+                end_time=self._get_timestamp(), 
+                status="running", 
+                progress=70
+            )
+            autonomous_control_agent_query_request = AgentInvokeRequest(
+                prompt=autonomous_control_agent_query,
+                max_tokens=1024,
+                temperature=0.7,
+                stop=None,
+                use_tools=False,
+                max_tool_calls=0,
+                extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                user_id=user_id,
+                tool_for_use=None
+            )
+            autonomous_control_agent_query = await self.llm.invoke_agent(self._agent, autonomous_control_agent_query_request)
+            autonomous_control_agent_response = await self._call_autonomous_control_agent(
+                task_id=user_id,
+                request_text=autonomous_control_agent_query.text
+            )
+            await self._call_platform_base(
+                session_id=user_id, 
+                step_name="Autonomous Control", 
+                content="오케스트레이션 에이전트가 자율제어 에이전트에게 수행해야 할 작업을 결정했습니다.", 
+                end_time=self._get_timestamp(), 
+                status="completed", 
+                progress=80
+            )
+            print(f"🔧 [ORCHESTRATE-8] Autonomous control agent response received: {autonomous_control_agent_response}", file=sys.stderr, flush=True)
+            print(f"🔧 [ORCHESTRATE-9] Autonomous control agent query: {autonomous_control_agent_query}", file=sys.stderr, flush=True)
+            print(f"🔧 [ORCHESTRATE-10] Autonomous control agent response received: {autonomous_control_agent_response}", file=sys.stderr, flush=True)
+            print(f"✅ [ORCHESTRATE-11] Orchestration completed successfully", file=sys.stderr, flush=True)
+
+
+
+            ## finally aggregate all the results
+            final_response = f"""
+            이제 최종적으로 사용자에게 요청에 대한 응답을 전달해야 합니다. 
+            아래는 각 에이전트들의 수행 결과입니다.
+            수행 결과를 종합적으로 분석하여 사용자에게 요청에 대한 응답을 전달해주세요.
+
+            이때 마크다운의 형식으로 응답을 전달해주세요.
+
+            ## 사용자 요청
+            {prompt}
+            ## 수행 내역
+            {response.text}
+            ## 모니터링 에이전트 수행 결과
+            {monitoring_agent_response}
+            ## 예측 에이전트 수행 결과
+            {prediction_agent_response}
+            ## 자율제어 에이전트 수행 결과
+            {autonomous_control_agent_response}
+            """
+
+
+
+            await self._call_platform_base(
+                session_id=user_id, 
+                step_name="Orchestration", 
+                content="오케스트레이션 에이전트가 최종적으로 보고서를 작성하고 있습니다.", 
+                end_time=self._get_timestamp(), 
+                status="completed", 
+                progress=90
+            )
+
+            final_response_request = AgentInvokeRequest(
+                prompt=final_response,
+                max_tokens=1024,
+                temperature=0.7,
+                stop=None,
+                use_tools=False,
+                max_tool_calls=0,
+                extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                user_id=user_id,
+                tool_for_use=None
+            )
+            final_response = await self.llm.invoke_agent(self._agent, final_response_request)
+            print(f"🔧 [ORCHESTRATE-12] Final response: {final_response}", file=sys.stderr, flush=True)
+            print(f"✅ [ORCHESTRATE-13] Orchestration completed successfully", file=sys.stderr, flush=True) 
+
+            return AgentResponse(
+                text=final_response.text,
+                tools_used=response.tools_used,
+                tool_results=response.tool_results,
+                metadata=response.metadata
+            )
 
         except Exception as e:
             # find out which line of code is causing the error
@@ -1145,7 +988,8 @@ class PrismOrchestrator:
                     "stop": stop,
                     "use_tools": use_tools,
                     "max_tool_calls": max_tool_calls,
-                    "extra_body": extra_body
+                    "extra_body": extra_body,
+                    "orchestration_mode": "error"
                 }
             )
 

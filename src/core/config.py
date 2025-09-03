@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     # PRISM-Core API Configuration (Orch → Core 호출용)
     PRISM_CORE_BASE_URL: str = "http://localhost:8000"
 
+    # Platform API Endpoints
+    PLATFORM_API_ENDPOINT: str = ""
+    MONITORING_API_ENDPOINT: str = ""
+    PREDICTION_API_ENDPOINT: str = ""
+    AUTOCONTROL_API_ENDPOINT: str = ""
+
     # Vector DB Configuration (Weaviate) - Single instance for all tools
     WEAVIATE_URL: str = "http://localhost:18080"
     WEAVIATE_API_KEY: str = ""
