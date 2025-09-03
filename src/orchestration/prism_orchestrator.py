@@ -1044,7 +1044,7 @@ class PrismOrchestrator:
         stop: Optional[List[str]] = None,
         use_tools: bool = True,
         max_tool_calls: int = 3,
-        extra_body: Optional[Dict[str, Any]] = None
+        extra_body: Optional[Dict[str, Any]] = {"enable_thinking": False}
     ) -> AgentResponse:
         """
         메인 오케스트레이션 메서드 - 워크플로우 기반 순차 실행
@@ -1074,7 +1074,11 @@ class PrismOrchestrator:
                 "user_id": user_id,
                 "max_tokens": max_tokens,
                 "temperature": temperature,
-                "timestamp": self._get_timestamp()
+                "timestamp": self._get_timestamp(),
+                "stop": stop,
+                "use_tools": use_tools,
+                "max_tool_calls": max_tool_calls,
+                "extra_body": extra_body
             }
 
             # Execute orchestration workflow
@@ -1137,11 +1141,15 @@ class PrismOrchestrator:
                     "error": str(e),
                     "user_id": user_id,
                     "prompt": prompt,
-                    "timestamp": self._get_timestamp()
+                    "timestamp": self._get_timestamp(),
+                    "stop": stop,
+                    "use_tools": use_tools,
+                    "max_tool_calls": max_tool_calls,
+                    "extra_body": extra_body
                 }
             )
 
-    async def _execute_agent_call(self, agent_name: str, prompt: str) -> Dict[str, Any]:
+    async def _execute_agent_call(self, agent_name: str, prompt: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """에이전트 호출을 실행합니다."""
         try:
             # Get agent from agent manager
@@ -1152,9 +1160,14 @@ class PrismOrchestrator:
             # Create agent invoke request
             request = AgentInvokeRequest(
                 prompt=prompt,
-                max_tokens=1024,
-                temperature=0.7,
-                use_tools=False  # Agent calls don't use tools directly
+                max_tokens=context.get("max_tokens", 1024),
+                temperature=context.get("temperature", 0.7),
+                stop=context.get("stop", None),
+                use_tools=context.get("use_tools", False),
+                max_tool_calls=context.get("max_tool_calls", 3),
+                extra_body=context.get("extra_body", {"enable_thinking": True}),
+                user_id=context.get("user_id", None),
+                tool_for_use=context.get("tool_for_use", None),
             )
             
             # Invoke agent using LLM service

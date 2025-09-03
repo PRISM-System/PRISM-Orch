@@ -46,6 +46,7 @@ async def run_orchestration(
     session_id = query.session_id or f"session_{uuid.uuid4()}"
 
     # Invoke high-level orchestrator (includes LLM-based decomposition, tool calls, RAG + compliance)
+    print(f"🚀 [API] Invoking orchestrator...\n {query.extra_body}", file=sys.stderr, flush=False)
     agent_resp = await orchestrator.orchestrate(
         prompt=query.query,
         user_id=query.user_id,

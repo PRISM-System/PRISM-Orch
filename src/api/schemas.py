@@ -35,8 +35,7 @@ class UserQueryInput(BaseModel):
     )
     stop: Optional[List[str]] = Field(
         default=None,
-        description="중단 시퀀스 목록",
-        example=["\n\n", "END"]
+        description="생성을 중단시키는 토큰 목록 (eos 토큰과 비슷한 역할을 함)",
     )
     use_tools: Optional[bool] = Field(
         default=True,
@@ -49,7 +48,7 @@ class UserQueryInput(BaseModel):
         example=3
     )
     extra_body: Optional[Dict[str, Any]] = Field(
-        default=None,
+        default={"chat_template_kwargs": {"enable_thinking": False}},
         description="추가 OpenAI 호환 옵션 (예: tool_choice, repetition_penalty)",
         example={"tool_choice": "auto"}
     )
