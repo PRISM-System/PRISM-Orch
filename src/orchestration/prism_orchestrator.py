@@ -171,20 +171,15 @@ class PrismOrchestrator:
         """오케스트레이션 파이프라인을 설정합니다."""
         import sys
         try:
-            print("🔧 [STEP 13-1] Starting sub-agents initialization...", file=sys.stderr, flush=True)
-            # 2. 하위 에이전트 초기화
-            self._initialize_sub_agents()
-            print("🔧 [STEP 13-2] Sub-agents initialization completed", file=sys.stderr, flush=True)
-            
-            print("🔧 [STEP 13-3] Starting orchestration agent registration...", file=sys.stderr, flush=True)
+            print("🔧 [STEP 13-1] Starting orchestration agent registration...", file=sys.stderr, flush=True)
             # 1. 메인 오케스트레이션 에이전트 등록
             self.register_orchestration_agent()
-            print("🔧 [STEP 13-4] Orchestration agent registration completed", file=sys.stderr, flush=True)
+            print("🔧 [STEP 13-2] Orchestration agent registration completed", file=sys.stderr, flush=True)
 
-            print("🔧 [STEP 13-5] Starting orchestration workflow definition...", file=sys.stderr, flush=True)
-            # 3. 오케스트레이션 워크플로우 정의
+            print("🔧 [STEP 13-3] Starting orchestration workflow definition...", file=sys.stderr, flush=True)
+            # 2. 오케스트레이션 워크플로우 정의
             self._define_orchestration_workflow()
-            print("🔧 [STEP 13-6] Orchestration workflow definition completed", file=sys.stderr, flush=True)
+            print("🔧 [STEP 13-4] Orchestration workflow definition completed", file=sys.stderr, flush=True)
             
             print("✅ 오케스트레이션 파이프라인 설정 완료")
             
@@ -220,7 +215,7 @@ class PrismOrchestrator:
         except Exception as e:
             print(f"❌ 하위 에이전트 초기화 실패: {str(e)}", file=sys.stderr, flush=True)
     # Pseudo methods for sub-agent API calls
-    async def _call_monitoring_agent(self, task_id: str, request_text: str) -> MonitoringAgentResponse:
+    async def _call_monitoring_agent(self, session_id: str, request_text: str) -> MonitoringAgentResponse:
         """
         모니터링 에이전트 호출
         사용 엔드포인트 목록
@@ -229,15 +224,20 @@ class PrismOrchestrator:
                 response body: {"result": str}
         """
         try:
-            requests.post(self.monitoring_agent_endpoint, 
-                                        json={"taskId": task_id, "query": request_text})
+            response = requests.post(self.monitoring_agent_endpoint, 
+                                        json={"taskId": session_id, "query": request_text})
+            if response.status_code == 200:
+                return MonitoringAgentResponse(result=response.json().get("result", "모니터링 에이전트 응답 없음"))
+            else:
+                print(f"⚠️ 모니터링 에이전트 응답 오류: {response.status_code}", file=sys.stderr, flush=True)
+                return MonitoringAgentResponse(result="모니터링 에이전트 응답 오류")
         except Exception as e:
             print(f"❌ 모니터링 에이전트 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
             return MonitoringAgentResponse(result="모니터링 에이전트 자동화 테스트 중")
     
     
 
-    async def _call_prediction_agent(self, task_id: str, request_text: str) -> PredictionAgentResponse:
+    async def _call_prediction_agent(self, session_id: str, request_text: str) -> PredictionAgentResponse:
         """예측 에이전트 호출
         사용 엔드포인트 목록
             - /api/v1/workflow/start: 예측 에이전트 워크플로우 시작
@@ -247,13 +247,17 @@ class PrismOrchestrator:
         try:
             # 실제 구현에서는 HTTP 요청으로 변경
             response = requests.post(self.prediction_agent_endpoint, 
-                                    json={"taskId": task_id, "query": request_text})
-        except:
-            response = PredictionAgentResponse(result="예측 에이전트 자동화 테스트 중")
-            
-            return response
+                                    json={"taskId": session_id, "query": request_text})
+            if response.status_code == 200:
+                return PredictionAgentResponse(result=response.json().get("result", "예측 에이전트 응답 없음"))
+            else:
+                print(f"⚠️ 예측 에이전트 응답 오류: {response.status_code}", file=sys.stderr, flush=True)
+                return PredictionAgentResponse(result="예측 에이전트 응답 오류")
+        except Exception as e:
+            print(f"❌ 예측 에이전트 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
+            return PredictionAgentResponse(result="예측 에이전트 자동화 테스트 중")
 
-    async def _call_autonomous_control_agent(self, task_id: str, request_text: str) -> AutonomousControlAgentResponse:
+    async def _call_autonomous_control_agent(self, session_id: str, request_text: str) -> AutonomousControlAgentResponse:
         """자율제어 에이전트 호출
         사용 엔드포인트 목록
             - /api/v1/workflow/start: 자율제어 에이전트 워크플로우 시작
@@ -263,11 +267,15 @@ class PrismOrchestrator:
         try:
             # 실제 구현에서는 HTTP 요청으로 변경
             response = requests.post(self.autonomous_control_agent_endpoint, 
-                                    json={"taskId": task_id, "query": request_text})
-        except:
-            response = AutonomousControlAgentResponse(result="자율제어 에이전트 자동화 테스트 중")
-            
-            return response
+                                    json={"taskId": session_id, "query": request_text})
+            if response.status_code == 200:
+                return AutonomousControlAgentResponse(result=response.json().get("result", "자율제어 에이전트 응답 없음"))
+            else:
+                print(f"⚠️ 자율제어 에이전트 응답 오류: {response.status_code}", file=sys.stderr, flush=True)
+                return AutonomousControlAgentResponse(result="자율제어 에이전트 응답 오류")
+        except Exception as e:
+            print(f"❌ 자율제어 에이전트 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
+            return AutonomousControlAgentResponse(result="자율제어 에이전트 자동화 테스트 중")
 
     async def _call_platform_base(self, session_id: str, step_name: str, content: str, end_time: str, status: str, progress: int) -> PlatformBaseResponse:
         """플랫폼 기반 호출
@@ -710,6 +718,7 @@ class PrismOrchestrator:
         self, 
         prompt: str, 
         user_id: Optional[str] = None,
+        session_id: Optional[str] = None,
         max_tokens: int = 1024,
         temperature: float = 0.7,
         stop: Optional[List[str]] = None,
@@ -723,6 +732,7 @@ class PrismOrchestrator:
         Args:
             prompt: 사용자 요청
             user_id: 사용자 ID (선택사항)
+            session_id: 작업 ID (선택사항)
             max_tokens: 최대 토큰 수 (기본값: 1024)
             temperature: 생성 온도 (기본값: 0.7)
             stop: 중단 시퀀스 (기본값: None)
@@ -731,9 +741,13 @@ class PrismOrchestrator:
             extra_body: 추가 OpenAI 호환 옵션 (기본값: None)
             
         Returns:
-            AgentResponse: 오케스트레이션 결과
+            AgentResponse: 오케스트레이션 결과 (session_id 포함)
         """
         try:
+            # session_id가 없으면 user_id를 기반으로 생성
+            if not session_id:
+                session_id = user_id or f"task_{self._generate_execution_id()}"
+            
             # Ensure agent is registered (already done in __init__, but double-check)
             if not self._agent:
                 print("⚠️ 에이전트가 등록되지 않았습니다. 다시 등록을 시도합니다.")
@@ -741,7 +755,7 @@ class PrismOrchestrator:
 
             import sys
             print("🔧 [ORCHESTRATE-1] Starting direct agent invocation with dynamic tools...", file=sys.stderr, flush=True)
-            print(f"🔧 [ORCHESTRATE-2] Context: user_query='{prompt[:50]}...', user_id={user_id}, use_tools={use_tools}", file=sys.stderr, flush=True)
+            print(f"🔧 [ORCHESTRATE-2] Context: user_query='{prompt[:50]}...', user_id={user_id}, session_id={session_id}, use_tools={use_tools}", file=sys.stderr, flush=True)
             
             # Check if dynamic tools are available
             if self.orch_tool_setup.is_dynamic_tool_enabled():
@@ -764,7 +778,7 @@ class PrismOrchestrator:
             )
 
             await self._call_platform_base(
-                session_id=user_id, 
+                session_id=session_id, 
                 step_name="Query Refinement", 
                 content="에이전트 오케스트레이션이 시작되어 사용자 질의를 이해하고 있습니다.", 
                 end_time=self._get_timestamp(), 
@@ -778,7 +792,7 @@ class PrismOrchestrator:
             print(f"🔧 [ORCHESTRATE-5] Agent response received: tools_used={response.tools_used}", file=sys.stderr, flush=True)
 
             await self._call_platform_base(
-                session_id=user_id, 
+                session_id=session_id, 
                 step_name="Query Refinement", 
                 content="에이전트 오케스트레이션이 시작되어 사용자 질의를 이해하였습니다. 요청 수행을 위한 오케스트레이션을 시작합니다.", 
                 end_time=self._get_timestamp(), 
@@ -790,6 +804,7 @@ class PrismOrchestrator:
             response.metadata.update({
                 "orchestration_mode": "direct_dynamic_tool",
                 "user_id": user_id,
+                "session_id": session_id,
                 "prompt": prompt,
                 "timestamp": self._get_timestamp(),
                 "dynamic_tools_enabled": self.orch_tool_setup.is_dynamic_tool_enabled(),
@@ -813,7 +828,7 @@ class PrismOrchestrator:
 
 
             await self._call_platform_base(
-                session_id=user_id, 
+                session_id=session_id, 
                 step_name="Monitoring", 
                 content="오케스트레이션 에이전트가 모니터링 에이전트에게 수행해야 할 작업을 결정하고 있습니다.", 
                 end_time=self._get_timestamp(), 
@@ -834,7 +849,7 @@ class PrismOrchestrator:
             )
             monitoring_agent_query = await self.llm.invoke_agent(self._agent, monitoring_agent_query_request)
             await self._call_platform_base(
-                session_id=user_id, 
+                session_id=session_id, 
                 step_name="Monitoring", 
                 content="오케스트레이션 에이전트가 모니터링 에이전트에게 수행해야 할 작업을 결정했습니다.", 
                 end_time=self._get_timestamp(), 
@@ -842,11 +857,11 @@ class PrismOrchestrator:
                 progress=30
             )
             monitoring_agent_response = await self._call_monitoring_agent(
-                task_id=user_id,
+                session_id=session_id,
                 request_text=monitoring_agent_query.text
             )
             await self._call_platform_base(
-                session_id=user_id, 
+                session_id=session_id, 
                 step_name="Monitoring", 
                 content="모니터링 에이전트가 수행한 결과를 오케스트레이션 에이전트에게 전달하고 있습니다.", 
                 end_time=self._get_timestamp(), 
@@ -866,7 +881,7 @@ class PrismOrchestrator:
             모니터링 에이전트 수행 결과: {monitoring_agent_response}
             """
             await self._call_platform_base(
-                session_id=user_id, 
+                session_id=session_id, 
                 step_name="Prediction", 
                 content="오케스트레이션 에이전트가 예측 에이전트에게 수행해야 할 작업을 결정하고 있습니다.", 
                 end_time=self._get_timestamp(), 
@@ -886,7 +901,7 @@ class PrismOrchestrator:
             )
             prediction_agent_query = await self.llm.invoke_agent(self._agent, prediction_agent_query_request)
             await self._call_platform_base(
-                session_id=user_id, 
+                session_id=session_id, 
                 step_name="Prediction", 
                 content="오케스트레이션 에이전트가 예측 에이전트에게 수행해야 할 작업을 결정했습니다.", 
                 end_time=self._get_timestamp(), 
@@ -894,7 +909,7 @@ class PrismOrchestrator:
                 progress=60
             )
             prediction_agent_response = await self._call_prediction_agent(
-                task_id=user_id,
+                session_id=session_id,
                 request_text=prediction_agent_query.text
             )
             print(f"🔧 [ORCHESTRATE-7] Prediction agent response received: {prediction_agent_response}", file=sys.stderr, flush=True)
@@ -911,7 +926,7 @@ class PrismOrchestrator:
             예측 에이전트 수행 결과: {prediction_agent_response}
             """
             await self._call_platform_base(
-                session_id=user_id, 
+                session_id=session_id, 
                 step_name="Autonomous Control", 
                 content="오케스트레이션 에이전트가 자율제어 에이전트에게 수행해야 할 작업을 결정하고 있습니다.", 
                 end_time=self._get_timestamp(), 
@@ -931,11 +946,11 @@ class PrismOrchestrator:
             )
             autonomous_control_agent_query = await self.llm.invoke_agent(self._agent, autonomous_control_agent_query_request)
             autonomous_control_agent_response = await self._call_autonomous_control_agent(
-                task_id=user_id,
+                session_id=session_id,
                 request_text=autonomous_control_agent_query.text
             )
             await self._call_platform_base(
-                session_id=user_id, 
+                session_id=session_id, 
                 step_name="Autonomous Control", 
                 content="오케스트레이션 에이전트가 자율제어 에이전트에게 수행해야 할 작업을 결정했습니다.", 
                 end_time=self._get_timestamp(), 
@@ -948,11 +963,69 @@ class PrismOrchestrator:
             print(f"✅ [ORCHESTRATE-11] Orchestration completed successfully", file=sys.stderr, flush=True)
 
 
+            ## compliance agent
+            # Compliance check를 위한 요청 구성
+            compliance_check_query = f"""
+            사용자 요청과 각 에이전트들의 수행 결과를 바탕으로 안전 규정 준수 여부를 검증해주세요.
+            
+            **검증 대상:**
+            - 사용자 요청: {prompt}
+            - 모니터링 에이전트 결과: {monitoring_agent_response}
+            - 예측 에이전트 결과: {prediction_agent_response}
+            - 자율제어 에이전트 결과: {autonomous_control_agent_response}
+            
+            **검증 목적:**
+            - 제안된 조치나 권장사항이 안전 규정을 준수하는지 확인
+            - 잠재적 위험 요소 식별
+            - 규정 준수를 위한 추가 조치 필요 여부 판단
+            """
+            
+            await self._call_platform_base(
+                session_id=session_id, 
+                step_name="Compliance Check", 
+                content="오케스트레이션 에이전트가 안전 규정 준수 여부를 검증하고 있습니다.", 
+                end_time=self._get_timestamp(), 
+                status="running", 
+                progress=85
+            )
+            
+            # Compliance tool을 사용하여 안전 규정 준수 여부 검증
+            compliance_request = ToolRequest(
+                tool_name="compliance_check",
+                parameters={
+                    "action": f"사용자 요청: {prompt}",
+                    "context": f"모니터링 결과: {monitoring_agent_response}, 예측 결과: {prediction_agent_response}, 자율제어 결과: {autonomous_control_agent_response}",
+                    "user_id": user_id
+                }
+            )
+            
+            # Compliance tool 실행
+            compliance_tool = self.tool_registry.get_tool("compliance_check")
+            if compliance_tool:
+                compliance_result = await compliance_tool.execute(compliance_request)
+                if compliance_result.success:
+                    compliance_data = compliance_result.result
+                    print(f"🔧 [ORCHESTRATE-11] Compliance check completed: {compliance_data}", file=sys.stderr, flush=True)
+                else:
+                    print(f"⚠️ [ORCHESTRATE-11] Compliance check failed: {compliance_result.error_message}", file=sys.stderr, flush=True)
+                    compliance_data = {"compliance_status": "check_failed", "risk_level": "unknown"}
+            else:
+                print(f"⚠️ [ORCHESTRATE-11] Compliance tool not found", file=sys.stderr, flush=True)
+                compliance_data = {"compliance_status": "tool_not_found", "risk_level": "unknown"}
+            
+            await self._call_platform_base(
+                session_id=session_id, 
+                step_name="Compliance Check", 
+                content="안전 규정 준수 여부 검증이 완료되었습니다.", 
+                end_time=self._get_timestamp(), 
+                status="completed", 
+                progress=88
+            )
 
             ## finally aggregate all the results
             final_response = f"""
             이제 최종적으로 사용자에게 요청에 대한 응답을 전달해야 합니다. 
-            아래는 각 에이전트들의 수행 결과입니다.
+            아래는 각 에이전트들의 수행 결과와 안전 규정 준수 검증 결과입니다.
             수행 결과를 종합적으로 분석하여 사용자에게 요청에 대한 응답을 전달해주세요.
 
             이때 마크다운의 형식으로 응답을 전달해주세요.
@@ -967,12 +1040,12 @@ class PrismOrchestrator:
             {prediction_agent_response}
             ## 자율제어 에이전트 수행 결과
             {autonomous_control_agent_response}
+            ## 안전 규정 준수 검증 결과
+            {compliance_data}
             """
 
-
-
             await self._call_platform_base(
-                session_id=user_id, 
+                session_id=session_id, 
                 step_name="Orchestration", 
                 content="오케스트레이션 에이전트가 최종적으로 보고서를 작성하고 있습니다.", 
                 end_time=self._get_timestamp(), 
@@ -995,12 +1068,30 @@ class PrismOrchestrator:
             print(f"🔧 [ORCHESTRATE-12] Final response: {final_response}", file=sys.stderr, flush=True)
             print(f"✅ [ORCHESTRATE-13] Orchestration completed successfully", file=sys.stderr, flush=True) 
 
-            return AgentResponse(
+            # 최종 응답에 session_id 포함
+            final_agent_response = AgentResponse(
                 text=final_response.text,
                 tools_used=response.tools_used,
                 tool_results=response.tool_results,
-                metadata=response.metadata
+                metadata={
+                    **response.metadata,
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "final_status": "completed",
+                    "completion_timestamp": self._get_timestamp()
+                }
             )
+
+            await self._call_platform_base(
+                session_id=session_id, 
+                step_name="Orchestration", 
+                content="오케스트레이션이 성공적으로 완료되었습니다.", 
+                end_time=self._get_timestamp(), 
+                status="completed", 
+                progress=100
+            )
+
+            return final_agent_response
 
         except Exception as e:
             # find out which line of code is causing the error
@@ -1014,13 +1105,15 @@ class PrismOrchestrator:
                 metadata={
                     "error": str(e),
                     "user_id": user_id,
+                    "session_id": session_id,
                     "prompt": prompt,
                     "timestamp": self._get_timestamp(),
                     "stop": stop,
                     "use_tools": use_tools,
                     "max_tool_calls": max_tool_calls,
                     "extra_body": extra_body,
-                    "orchestration_mode": "error"
+                    "orchestration_mode": "error",
+                    "final_status": "error"
                 }
             )
 

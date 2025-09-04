@@ -8,16 +8,18 @@ class UserQueryInput(BaseModel):
         description="사용자의 자연어 질의 원문",
         example="A-1 라인 압력에 이상이 생긴 것 같은데, 원인이 뭐야?"
     )
-    session_id: Optional[str] = Field(
-        None,
-        description="사용자 세션을 식별하기 위한 ID",
-        example="user123_session456"
-    )
     user_id: Optional[str] = Field(
         None,
         description="사용자 식별자(메모리 검색 등 개인화에 사용)",
         example="engineer_kim"
     )
+    
+    session_id: Optional[str] = Field(
+        None,
+        description="사용자 세션을 식별하기 위한 ID",
+        example="user123_session456"
+    )
+
     user_preferences: Optional[Dict[str, Any]] = Field(
         default_factory=dict,
         description="사용자 선호도 (예: {'mode': 'conservative'})"
@@ -83,6 +85,7 @@ class TaskInfo(BaseModel):
 
 class OrchestrationResponse(BaseModel):
     """오케스트레이션 최종 결과를 사용자에게 반환하기 위한 모델"""
+    user_id: str = Field(..., description="사용자 식별자")
     session_id: str = Field(..., description="현재 대화의 세션 ID")
     final_answer: str = Field(
         ...,

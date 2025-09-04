@@ -80,6 +80,7 @@ async def run_orchestration(
                         compliance_evidence.extend([str(d) for d in docs])
 
     return OrchestrationResponse(
+        user_id=query.user_id,
         session_id=session_id,
         final_answer=agent_resp.text,
         final_markdown=agent_resp.text,
