@@ -282,24 +282,30 @@ class PrismOrchestrator:
                     "progress": 100
                     }
         """
-        
-        try:
-            requests.post(
-                self.platform_api_base, 
-                json={
-                    "session_id": session_id,
-                    "step_name": step_name, 
-                    "content": content, 
-                    "end_time": end_time, 
-                    "status": status, 
-                    "progress": progress
-                    }
-                    )
-        except Exception as e:
-            print(f"❌ 플랫폼 기반 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
-        
-        return PlatformBaseResponse(status="success", message="WebSocket update sent")
 
+        headers = {
+        "accept": "application/json",
+        "Content-Type": "application/json",
+        "X-CSRFTOKEN": "91p6AK0OsryzHNAQqOaTnxKtDeS3uE53"
+        }
+
+        payload = {
+        "session_id": session_id,
+        "step_name": step_name,
+        "content": content,
+        "end_time": end_time,
+        "status": status,
+        "progress": progress
+        }
+        try:
+            resp = requests.post(self.platform_api_base, headers=headers, json=payload, timeout=10)
+            resp.raise_for_status()  # HTTP 오류 발생 시 예외
+            response = resp.json()       # 서버에서 JSON 응답 반환 시
+            return PlatformBaseResponse(status="success", message="WebSocket update sent")
+        except requests.RequestException as e:
+            # 네트워크 오류나 4xx/5xx 에러 처리
+            print(f"❌ 플랫폼 기반 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
+            return PlatformBaseResponse(status="error", message="WebSocket update failed")
 
     def _define_orchestration_workflow(self) -> None:
         """오케스트레이션 워크플로우를 정의합니다."""
