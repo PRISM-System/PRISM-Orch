@@ -27,6 +27,7 @@ class OrchToolSetup:
     
     def __init__(self):
         # Orch 전용 설정
+        import sys
         self.weaviate_url = settings.WEAVIATE_URL
         self.openai_base_url = settings.OPENAI_BASE_URL
         self.openai_api_key = settings.OPENAI_API_KEY
@@ -74,6 +75,8 @@ class OrchToolSetup:
                 openai_base_url=self.openai_base_url,
                 openai_api_key=self.openai_api_key,
                 model_name=settings.VLLM_MODEL,
+                encoder_model=self.encoder_model,
+                vector_dim=self.vector_dim,
                 client_id=self.client_id,
                 class_prefix=self.class_prefix
             )
@@ -87,7 +90,8 @@ class OrchToolSetup:
                 openai_base_url=self.openai_base_url,
                 openai_api_key=self.openai_api_key,
                 model_name=settings.VLLM_MODEL,
-                embedder_model_name=settings.VECTOR_ENCODER_MODEL,
+                encoder_model=self.encoder_model,
+                vector_dim=self.vector_dim,
                 client_id=self.client_id,
                 class_prefix=self.class_prefix
             )

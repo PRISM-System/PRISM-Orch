@@ -465,7 +465,7 @@ def main():
     openai_api_key = os.getenv("OPENAI_API_KEY", "dummy-key")
     max_docs = os.getenv("MAX_DOCUMENTS")
     max_documents = int(max_docs) if max_docs else None
-    encoder_model = os.getenv("ENCODER_MODEL", "sentence-transformers/paraphrase-multilingual-mpnet-base-v2")
+    encoder_model = os.getenv("VECTOR_ENCODER_MODEL", "sentence-transformers/paraphrase-multilingual-mpnet-base-v2")
     vector_dim = int(os.getenv("VECTOR_DIM", "768"))
     class_prefix = os.getenv("CLASS_PREFIX", "KOSHA")
     

@@ -1002,7 +1002,7 @@ class PrismOrchestrator:
             # Compliance tool 실행
             compliance_tool = self.tool_registry.get_tool("compliance_check")
             if compliance_tool:
-                compliance_result = await compliance_tool.execute(compliance_request)
+                compliance_result = await complianwce_tool.execute(compliance_request)
                 if compliance_result.success:
                     compliance_data = compliance_result.result
                     print(f"🔧 [ORCHESTRATE-11] Compliance check completed: {compliance_data}", file=sys.stderr, flush=True)
