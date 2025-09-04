@@ -241,13 +241,12 @@ class PrismOrchestrator:
         """예측 에이전트 호출
         사용 엔드포인트 목록
             - /api/v1/workflow/start: 예측 에이전트 워크플로우 시작
-                request body:{'taskId': 'TASK_0001', 'query': str}
-                response body: {"result": str}
+                {"query": "CMP 센서의 MOTOR_CURRENT를 2025-08-20 09:00:00~09:10:00 예측해줘"}
         """
         try:
             # 실제 구현에서는 HTTP 요청으로 변경
             response = requests.post(self.prediction_agent_endpoint, 
-                                    json={"taskId": session_id, "query": request_text})
+                                    json={"query": request_text})
             if response.status_code == 200:
                 return PredictionAgentResponse(result=response.json().get("result", "예측 에이전트 응답 없음"))
             else:
