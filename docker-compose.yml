@@ -234,6 +234,66 @@ services:
     networks:
       - prism-shared-network
 
+  manufacture-docs-processor:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.11-slim
+        WORKDIR /app
+        
+        # Install system dependencies
+        RUN apt-get update && apt-get install -y \
+            git \
+            && rm -rf /var/lib/apt/lists/*
+        
+        # Install Python dependencies
+        RUN pip install --no-cache-dir \
+            weaviate-client==4.5.0 \
+            openai==1.7.1 \
+            pydantic-settings \
+            markitdown[pdf]
+        
+        # Set up PRISM-Core
+        ARG USE_LOCAL_PRISM_CORE="true"
+        ARG GITHUB_TOKEN
+        ARG PRISM_CORE_VERSION="main"
+        
+        RUN if [ "$USE_LOCAL_PRISM_CORE" = "false" ]; then \
+            if [ -z "$GITHUB_TOKEN" ]; then \
+                echo "Error: GITHUB_TOKEN is required when USE_LOCAL_PRISM_CORE is false" && exit 1; \
+            fi; \
+            git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/" && \
+            pip install --no-cache-dir git+https://github.com/PRISM-System/prism-core.git@${PRISM_CORE_VERSION} && \
+            git config --global --unset url."https://${GITHUB_TOKEN}@github.com/".insteadOf; \
+        fi
+        
+        # Copy files
+        COPY dev/manufacture_docs_processor_simple.py /app/
+        COPY data/manufacture_docs /app/data/manufacture_docs
+        
+        CMD ["python", "manufacture_docs_processor_simple.py"]
+      args:
+        GITHUB_TOKEN: ${GITHUB_TOKEN}
+        USE_LOCAL_PRISM_CORE: "${USE_LOCAL_PRISM_CORE:-true}"
+        PRISM_CORE_VERSION: "${PRISM_CORE_VERSION:-main}"
+    container_name: prism-manufacture-docs-processor
+    volumes:
+      - ../prism-core/prism_core:/app/prism_core
+      - ./data/manufacture_docs:/app/data/manufacture_docs:ro
+    environment:
+      - WEAVIATE_URL=http://weaviate:8080
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CLASS_PREFIX=${CLASS_PREFIX:-MANUFACTURE}
+      - MAX_DOCUMENTS=${MAX_DOCUMENTS:-100}
+      - VECTOR_ENCODER_MODEL=${VECTOR_ENCODER_MODEL:-sentence-transformers/paraphrase-multilingual-mpnet-base-v2}
+      - VECTOR_DIM=${VECTOR_DIM:-768}
+    depends_on:
+      - weaviate
+    restart: no
+    networks:
+      - prism-shared-network
+
   vector-search-tester:
     build:
       context: .
@@ -326,25 +386,29 @@ networks:
     external: true
 
 # Usage:
-# 1) export GITHUB_TOKEN=...; docker compose up -d --build weaviate app
+# 1) export GITHUB_TOKEN=...; docker compose up -d --build weaviate app vector-search-web   
 # 2) docker compose run --rm seed
 # 3) docker compose run --rm kosha-processor        # Upload KOSHA documents to compliance domain
-# 4) docker compose run --rm agent-history-uploader # Upload agent interaction history to history domain
-# 5) docker compose run --rm vector-search-tester   # Test vector-based search functionality
-# 6) docker compose up -d vector-search-web          # Start web interface for interactive search
+# 4) docker compose run --rm manufacture-docs-processor # Upload semiconductor manufacturing documents
+# 5) docker compose run --rm agent-history-uploader # Upload agent interaction history to history domain
+# 6) docker compose run --rm vector-search-tester   # Test vector-based search functionality
+# 7) docker compose up -d vector-search-web          # Start web interface for interactive search
 #
 # Web Interfaces:
 # - Interactive Vector Search UI: http://localhost:8200 (search with custom queries) ✅
 # - View all objects with vectors: http://localhost:18080/v1/objects?include=vector ✅
 # - Browse Weaviate schema: http://localhost:18080/v1/schema ✅
 # - View KOSHA compliance documents: http://localhost:18080/v1/objects?class=KOSHACompliance&include=vector ✅
+# - View manufacturing documents: http://localhost:18080/v1/objects?class=MANUFACTUREDocs&include=vector ✅
 # - View agent interaction history: http://localhost:18080/v1/objects?class=KOSHAHistory&include=vector ✅
 # - Direct Weaviate API explorer: http://localhost:18080/v1 ✅
-# 7) docker compose down
+# 8) docker compose down
 #
 # Options:
 # - MAX_DOCUMENTS=10 docker compose run --rm kosha-processor     # Process limited KOSHA documents
+# - MAX_DOCUMENTS=20 docker compose run --rm manufacture-docs-processor  # Process limited manufacturing docs
 # - CLASS_PREFIX=Custom docker compose run --rm kosha-processor  # Use custom class prefix for KOSHA
+# - CLASS_PREFIX=Custom docker compose run --rm manufacture-docs-processor  # Use custom prefix for manufacturing docs
 # - CLASS_PREFIX=Custom docker compose run --rm agent-history-uploader  # Use custom prefix for agent history
 #
 # PRISM-Core Version Control:
