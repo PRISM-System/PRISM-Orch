@@ -268,10 +268,10 @@ services:
         fi
         
         # Copy files
-        COPY dev/manufacture_docs_processor_simple.py /app/
+        COPY dev/manufacture_docs_processor.py /app/
         COPY data/manufacture_docs /app/data/manufacture_docs
         
-        CMD ["python", "manufacture_docs_processor_simple.py"]
+        CMD ["python", "manufacture_docs_processor.py"]
       args:
         GITHUB_TOKEN: ${GITHUB_TOKEN}
         USE_LOCAL_PRISM_CORE: "${USE_LOCAL_PRISM_CORE:-true}"
