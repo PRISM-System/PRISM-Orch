@@ -305,7 +305,8 @@
           }
         },
         "forecast_horizon": "3_hours",
-        "model_type": "lstm_multivariate"
+        "model_type": "lstm_multivariate",
+        "query": "모니터링 결과 제품 순도가 99.24%로 목표치(99.5%) 미달이며, 지난 6.5시간 동안 -0.0034%/10분 속도로 지속 감소 중입니다. 원료 조성 변화 또는 환류비 부족이 원인으로 추정됩니다. 현재 추세가 계속될 경우 향후 3시간 동안 순도가 어떻게 변화할지 예측해주세요. 특히 품질 불량 임계치(99.0%) 도달 시점과 예상 손실 규모를 분석해주세요."
       },
       "response": {
         "status": "success",
@@ -540,7 +541,8 @@
           "defect_probability": 0.89,
           "time_to_defect": "2.25_hours"
         },
-        "control_method": "mpc_with_pid"
+        "control_method": "mpc_with_pid",
+        "query": "예측 결과 조치 없이 2시간 15분 후 순도가 98.61%로 하락하여 품질 불량 발생 확률 89%, 약 1,500만원의 손실이 예상됩니다. 순도를 목표치 99.6%로 회복하기 위한 최적 운전 조건(증류탑 온도, 환류비)을 계산하고 안전하게 적용해주세요. 제어 비용 대비 편익을 고려하여 최적 제어 시퀀스를 제시해주세요."
       },
       "response": {
         "status": "success",

@@ -411,7 +411,8 @@
           }
         },
         "forecast_horizon": "6_hours",
-        "model_type": "thermal_dynamics_model"
+        "model_type": "thermal_dynamics_model",
+        "query": "모니터링 결과 충방전 사이클 테스트에서 용량 유지율이 78.5%로 기준(85%)을 7.6% 미달하며 지속 저하 중입니다. 내부 저항 증가와 전해액 열화가 주요 원인입니다. 현재 추세가 계속될 경우 향후 80분간 용량과 수명이 어떻게 전개될지 예측해주세요. 특히 품질 불량 임계치 도달 시점과 리콜 가능성을 분석해주세요."
       },
       "response": {
         "status": "success",
@@ -735,7 +736,8 @@
           "thermal_runaway_probability_6h": 0.48,
           "production_loss_risk": 55000000
         },
-        "control_method": "adaptive_pid_with_cooling"
+        "control_method": "adaptive_pid_with_cooling",
+        "query": "예측 결과 48분 후 용량 유지율이 72.3%로 하락하고 내부 저항이 35% 증가하여 품질 불량 및 리콜 위험이 높아집니다. 약 6,200만원의 손실이 예상됩니다. 용량 유지율을 목표치 85% 이상으로 회복하기 위한 최적 제어 파라미터(충전 전류, 전압 범위, 온도 관리)를 계산하고 안전하게 적용해주세요."
       },
       "response": {
         "status": "success",
@@ -1151,7 +1153,8 @@
           "IEC 62133 (전기 안전 표준)",
           "UL 1642 (리튬 배터리 안전 표준)",
           "산업안전보건법 (Occupational Safety and Health Act)"
-        ]
+        ],
+        "query": "배터리 충방전 제어 조치가 완료되었습니다. 충전 전류를 조정하고 전압 범위 및 온도 관리를 최적화했습니다. 이 제어 조치가 전기용품안전관리법 배터리 안전 기준, UN38.3 운송 안전 기준, KC 인증 성능 요구사항 등 관련 규제를 모두 준수하는지 검증해주세요. 제어 후 용량 유지율 86.2%, 내부 저항 22 mΩ로 예상됩니다."
       },
       "response": {
         "status": "success",

@@ -475,7 +475,8 @@
           }
         },
         "forecast_horizon": "4_hours",
-        "model_type": "lstm_with_constraint"
+        "model_type": "lstm_with_constraint",
+        "query": "모니터링 결과 촉매 투입 비율이 0.42%로 임계치(0.40%)를 5% 초과하여 지속 증가 중입니다. 생산성은 양호하나 VOC 배출량이 152 kg/h로 규제 한계(120 kg/h)를 26.7% 초과하여 K-REACH 위반 상태입니다. 현재 추세가 계속될 경우 향후 60분간 VOC 배출과 환경 영향이 어떻게 전개될지 예측해주세요. 특히 규제 위반 심화 정도와 예상 벌금 규모를 분석해주세요."
       },
       "response": {
         "status": "success",
@@ -838,7 +839,8 @@
           "time_to_violation": "1.5_hours",
           "penalty_risk": "5억원 이상"
         },
-        "control_method": "mpc_with_constraint"
+        "control_method": "mpc_with_constraint",
+        "query": "예측 결과 35분 후 VOC 배출량이 규제 한계를 40.5% 초과하고 K-REACH 위반 벌금이 약 8,500만원으로 예상됩니다. 촉매 투입 비율을 최적값 0.32%로 감소시키고 VOC 배출을 규제 한계 이내로 낮추기 위한 최적 제어 파라미터(CATALYST_RATIO, REACTOR_TEMP, FEED_RATE)를 계산하고 안전하게 적용해주세요."
       },
       "response": {
         "status": "success",
@@ -1199,7 +1201,8 @@
           "K-REACH (화학물질 등록 및 평가)",
           "화학물질관리법 (Chemicals Control Act)",
           "환경오염시설 통합관리법 (Integrated Environmental Control)"
-        ]
+        ],
+        "query": "촉매 투입 비율 제어 조치가 완료되었습니다. 촉매 비율을 0.42%에서 0.32%로 23.8% 감소시키고 반응기 온도 및 원료 투입량을 조정했습니다. 이 제어 조치가 K-REACH 화학물질 관리, 대기환경보전법 VOC 배출 기준, 화학물질안전원 안전 기준 등 관련 규제를 모두 준수하는지 검증해주세요. 제어 후 VOC 배출량 105 kg/h, 생산율 78 ton/h로 예상됩니다."
       },
       "response": {
         "status": "success",

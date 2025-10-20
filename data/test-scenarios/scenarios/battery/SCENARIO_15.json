@@ -452,7 +452,8 @@
           }
         },
         "forecast_horizon": "7_days",
-        "model_type": "degradation_physics_model"
+        "model_type": "degradation_physics_model",
+        "query": "모니터링 결과 전극 코팅 두께가 불균일하며 편차가 ±18.5 μm로 기준(±10 μm)을 85.0% 초과하고 있습니다. 코팅 불량률 22.3%로 급증했으며, 용량 저하가 예상됩니다. 현재 패턴이 계속될 경우 향후 55분간 코팅 품질과 배터리 성능이 어떻게 악화될지 예측해주세요. 특히 불량률 증가와 용량 감소를 분석해주세요."
       },
       "response": {
         "status": "success",
@@ -785,7 +786,8 @@
           "grade_downgrade_risk": "severe",
           "revenue_loss_risk": 35000000
         },
-        "control_method": "pid_with_optimization"
+        "control_method": "pid_with_optimization",
+        "query": "예측 결과 조치 없이 55분 경과 시 코팅 두께 편차가 ±18.5 μm에서 ±32.7 μm로 악화되고, 불량률이 43.8%로 증가하여 약 4,500만원의 손실이 예상됩니다. 코팅 두께를 목표값 85 μm로 안정화하고 편차를 ±10 μm 이내로 억제하기 위한 최적 제어 파라미터(슬러리 점도, 코팅 속도, 건조 온도)를 계산하고 안전하게 적용해주세요."
       },
       "response": {
         "status": "success",

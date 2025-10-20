@@ -462,7 +462,8 @@
           }
         },
         "forecast_horizon": "2_heats",
-        "model_type": "metallurgical_kinetics_model"
+        "model_type": "metallurgical_kinetics_model",
+        "query": "모니터링 결과 압연 온도가 1,142°C로 임계치(1,180°C)의 96.8%에 도달했으며 지속 상승 중입니다(+1.85°C/분). 가열로 제어 불량이 주요 원인입니다. 현재 상승률이 계속될 경우 향후 50분간 온도와 제품 품질이 어떻게 전개될지 예측해주세요. 특히 임계치 도달 시점과 판재 손상 가능성을 분석해주세요."
       },
       "response": {
         "status": "success",

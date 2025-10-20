@@ -433,7 +433,8 @@
           }
         },
         "forecast_horizon": "4_hours",
-        "model_type": "arima_multivariate"
+        "model_type": "arima_multivariate",
+        "query": "모니터링 결과 전해액 온도가 52.7°C로 임계치(55°C)의 95.8%에 도달했으며 지속 상승 중입니다(+0.035°C/분). 냉각 시스템 효율 저하가 주요 원인입니다. 현재 상승률이 계속될 경우 향후 70분간 온도와 배터리 품질이 어떻게 전개될지 예측해주세요. 특히 열폭주 위험 임계치 도달 시점과 안전 리스크를 분석해주세요."
       },
       "response": {
         "status": "success",
