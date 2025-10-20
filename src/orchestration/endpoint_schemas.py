@@ -50,3 +50,42 @@ class PlatformBaseResponse(BaseModel):
     """
     status: str = Field(..., description="상태")
     message: str = Field(..., description="메시지")
+
+class OrchestrationProgress(BaseModel):
+    """
+    {
+    "session_id": "user_1234_task_940",
+    "current_step": "monitoring",
+    "current_progress": 100,
+    "user_request": "A-1 라인의 이상 여부를 확인해줘.",
+    "orchestration_plan": "{orchestration_plan}"
+    "monitoring_agent_response": "{monitoring_agent_response}"
+    "prediction_agent_response": "{prediction_agent_response}"
+    "autonomous_control_agent_response": "{autonomous_control_agent_response}"
+    "compliance_data": "{compliance_data}"
+    }
+    """
+    session_id: str = Field(..., description="작업 ID (session id)", default=None)
+    current_step: str = Field(..., description="현재 단계", default=None)
+    current_progress: int = Field(..., description="현재 진행률", default=None)
+    status: str = Field(..., description="상태", default=None)
+    user_request: str = Field(..., description="사용자 요청", default=None)
+    orchestration_plan: str = Field(..., description="오케스트레이션 계획", default=None)
+    monitoring_agent_response: str = Field(..., description="모니터링 에이전트 응답", default=None)
+    prediction_agent_response: str = Field(..., description="예측 에이전트 응답", default=None)
+    autonomous_control_agent_response: str = Field(..., description="자율제어 에이전트 응답", default=None)
+    compliance_data: str = Field(..., description="안전 규정 준수 검증 결과", default=None)
+
+    def __repr__(self) -> str:
+        return f"""
+        OrchestrationProgress(
+        session_id={self.session_id if self.session_id else "None"}, 
+        current_step={self.current_step if self.current_step else "None"}, 
+        current_progress={self.current_progress if self.current_progress else "None"}, 
+        user_request={self.user_request if self.user_request else "None"}, 
+        orchestration_plan={self.orchestration_plan if self.orchestration_plan else "None"}, 
+        monitoring_agent_response={self.monitoring_agent_response if self.monitoring_agent_response else "None"}, 
+        prediction_agent_response={self.prediction_agent_response if self.prediction_agent_response else "None"}, 
+        autonomous_control_agent_response={self.autonomous_control_agent_response if self.autonomous_control_agent_response else "None"}, 
+        compliance_data={self.compliance_data if self.compliance_data else "None"})"
+        """
