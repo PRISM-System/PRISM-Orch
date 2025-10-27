@@ -432,7 +432,12 @@
         "status": "success",
         "workflow_id": "wf_battery_aging_003",
         "message": "모니터링 완료. 예측 분석 시작.",
-        "next_agent": "Predictive Agent"
+        "next_agent": "Predictive Agent",
+        "monitored_timeseries": {
+          "format": "csv",
+          "description": "모니터링 데이터",
+          "sample_data": "TIMESTAMP,VAR\n2025-05-01T00:00:00Z,100"
+        }
       },
       "monitored_timeseries": {
         "format": "csv",
@@ -764,7 +769,12 @@
         "status": "success",
         "workflow_id": "wf_battery_aging_003",
         "message": "예측 분석 완료. 자동 제어 시작.",
-        "next_agent": "AutoControl Agent"
+        "next_agent": "AutoControl Agent",
+        "predicted_timeseries": {
+          "format": "csv",
+          "description": "예측 데이터",
+          "sample_data": "TIMESTAMP,VAR,VAR_LOWER_95,VAR_UPPER_95\n2025-05-01T12:00:00Z,100,95,105"
+        }
       },
       "predicted_timeseries": {
         "format": "csv",

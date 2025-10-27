@@ -412,7 +412,12 @@
         "status": "success",
         "workflow_id": "wf_battery_coating_002",
         "message": "Monitoring 완료. Predictive Agent로 전달.",
-        "next_step": "prediction_analysis"
+        "next_step": "prediction_analysis",
+        "monitored_timeseries": {
+          "format": "csv",
+          "description": "모니터링 결과 (placeholder)",
+          "sample_data": "TIMESTAMP,VALUE\n2025-05-01T00:00:00Z,100"
+        }
       },
       "monitored_timeseries": {
         "format": "csv",
@@ -619,7 +624,12 @@
         "status": "success",
         "workflow_id": "wf_battery_coating_002",
         "message": "워크플로우 완료. 사용자에게 결과 전달.",
-        "next_step": "return_to_user"
+        "next_step": "return_to_user",
+        "predicted_timeseries": {
+          "format": "csv",
+          "description": "예측 결과 (placeholder)",
+          "sample_data": "TIMESTAMP,VALUE,VALUE_LOWER_95,VALUE_UPPER_95\n2025-05-01T12:00:00Z,100,95,105"
+        }
       },
       "predicted_timeseries": {
         "format": "csv",

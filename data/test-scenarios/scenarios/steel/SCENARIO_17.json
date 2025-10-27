@@ -12,7 +12,14 @@
     "complexity": "low",
     "description": "열간 압연 공정에서 강판 두께가 목표치를 벗어나는 현상을 실시간으로 감지하고 원인을 분석하는 시나리오. 압연 두께 편차는 제품 품질, 후속 공정, 고객 요구사항에 직접적인 영향을 미치며, 즉각적인 조치가 필요함",
     "description_en": "Scenario for real-time detection and analysis of steel plate thickness deviation from target in hot rolling process. Rolling thickness deviation directly affects product quality, downstream processes, and customer requirements, requiring immediate action",
-    "tags": ["steel", "rolling", "thickness", "quality_control", "hot_rolling", "gauge_control"]
+    "tags": [
+      "steel",
+      "rolling",
+      "thickness",
+      "quality_control",
+      "hot_rolling",
+      "gauge_control"
+    ]
   },
   "query": {
     "text": "압연 라인 ROLL_004의 THICKNESS가 목표 편차를 초과하고 있습니다. 현재 상황을 분석해주세요.",
@@ -32,35 +39,50 @@
         "name": "THICKNESS",
         "unit": "mm",
         "description": "압연 강판 두께",
-        "normal_range": [4.9, 5.1],
+        "normal_range": [
+          4.9,
+          5.1
+        ],
         "critical_threshold": 5.3
       },
       {
         "name": "ROLL_GAP",
         "unit": "mm",
         "description": "롤 간격",
-        "normal_range": [4.7, 4.9],
+        "normal_range": [
+          4.7,
+          4.9
+        ],
         "critical_threshold": 5.1
       },
       {
         "name": "ROLLING_SPEED",
         "unit": "m/min",
         "description": "압연 속도",
-        "normal_range": [180, 220],
+        "normal_range": [
+          180,
+          220
+        ],
         "critical_threshold": 250
       },
       {
         "name": "TENSION",
         "unit": "kN",
         "description": "장력",
-        "normal_range": [120, 160],
+        "normal_range": [
+          120,
+          160
+        ],
         "critical_threshold": 180
       },
       {
         "name": "TEMPERATURE",
         "unit": "°C",
         "description": "강판 온도",
-        "normal_range": [950, 1050],
+        "normal_range": [
+          950,
+          1050
+        ],
         "critical_threshold": 1100
       }
     ],
@@ -75,7 +97,10 @@
       "description": "강판 두께가 목표 5.0mm에서 5.25mm로 편차 증가",
       "start_time": "2025-05-01T03:00:00Z",
       "peak_time": "2025-05-01T06:00:00Z",
-      "affected_parameters": ["THICKNESS", "ROLL_GAP"]
+      "affected_parameters": [
+        "THICKNESS",
+        "ROLL_GAP"
+      ]
     }
   },
   "agent_workflow": {
@@ -124,7 +149,13 @@
           },
           "process": "Rolling",
           "target_variable": "THICKNESS",
-          "source_variables": ["THICKNESS", "ROLL_GAP", "ROLLING_SPEED", "TENSION", "TEMPERATURE"]
+          "source_variables": [
+            "THICKNESS",
+            "ROLL_GAP",
+            "ROLLING_SPEED",
+            "TENSION",
+            "TEMPERATURE"
+          ]
         },
         "context": {
           "industry": "steel",
@@ -144,7 +175,10 @@
             {
               "name": "THICKNESS",
               "current_value": 5.25,
-              "normal_range": [4.9, 5.1],
+              "normal_range": [
+                4.9,
+                5.1
+              ],
               "target_value": 5.0,
               "deviation": 0.25,
               "tolerance": 0.1,
@@ -153,7 +187,10 @@
             {
               "name": "ROLL_GAP",
               "current_value": 5.02,
-              "normal_range": [4.7, 4.9],
+              "normal_range": [
+                4.7,
+                4.9
+              ],
               "target_value": 4.8,
               "deviation": 0.22,
               "status": "above_target"
@@ -161,21 +198,30 @@
             {
               "name": "ROLLING_SPEED",
               "current_value": 198.5,
-              "normal_range": [180, 220],
+              "normal_range": [
+                180,
+                220
+              ],
               "deviation": 0.0,
               "status": "normal"
             },
             {
               "name": "TENSION",
               "current_value": 138.2,
-              "normal_range": [120, 160],
+              "normal_range": [
+                120,
+                160
+              ],
               "deviation": 0.0,
               "status": "normal"
             },
             {
               "name": "TEMPERATURE",
               "current_value": 1015.0,
-              "normal_range": [950, 1050],
+              "normal_range": [
+                950,
+                1050
+              ],
               "deviation": 0.0,
               "status": "normal"
             }
@@ -243,7 +289,7 @@
           "comparative_analysis": {
             "normal_shift_average_thickness": 5.02,
             "current_shift_average_thickness": 5.12,
-            "shift_deviation": 0.10,
+            "shift_deviation": 0.1,
             "normal_shift_defect_rate": "1.5%",
             "current_shift_defect_rate": "9.8%",
             "defect_rate_increase": "6.5배"
@@ -275,7 +321,12 @@
         "status": "success",
         "workflow_id": "wf_steel_rolling_001",
         "message": "워크플로우 완료. 사용자에게 결과 전달.",
-        "next_step": "return_to_user"
+        "next_step": "return_to_user",
+        "monitored_timeseries": {
+          "format": "csv",
+          "description": "모니터링 데이터",
+          "sample_data": "TIMESTAMP,VAR\n2025-05-01T00:00:00Z,100"
+        }
       },
       "monitored_timeseries": {
         "format": "csv",
@@ -322,7 +373,10 @@
   },
   "expected_answer": {
     "workflow_type": "monitoring_only",
-    "agents_involved": ["Orchestration", "Monitoring"],
+    "agents_involved": [
+      "Orchestration",
+      "Monitoring"
+    ],
     "key_findings": {
       "anomaly_detected": true,
       "anomaly_type": "thickness_deviation",
@@ -333,7 +387,11 @@
       "roll_gap": 5.02,
       "thickness_roll_gap_correlation": 0.92,
       "severity": "high",
-      "root_causes": ["roll_gap_increase", "agc_system_error", "roll_wear"],
+      "root_causes": [
+        "roll_gap_increase",
+        "agc_system_error",
+        "roll_wear"
+      ],
       "affected_length": 3500,
       "affected_weight": 137,
       "cpk": 0.42
@@ -355,7 +413,10 @@
   "test_validation": {
     "validate_workflow": {
       "expected_steps": 4,
-      "required_agents": ["Orchestration", "Monitoring"],
+      "required_agents": [
+        "Orchestration",
+        "Monitoring"
+      ],
       "workflow_sequence": [
         "User → Orchestration",
         "Orchestration → Monitoring",
@@ -380,7 +441,7 @@
     },
     "performance_criteria": {
       "total_workflow_time_max_seconds": 60,
-      "anomaly_detection_accuracy_min": 0.90,
+      "anomaly_detection_accuracy_min": 0.9,
       "root_cause_identification_required": true,
       "quality_impact_assessment_required": true
     }

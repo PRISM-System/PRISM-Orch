@@ -348,7 +348,17 @@
         "status": "success",
         "workflow_id": "wf_steel_casting_20250501_001",
         "message": "Monitoring 완료. Predictive Agent로 전달.",
-        "next_step": "prediction_analysis"
+        "next_step": "prediction_analysis",
+        "monitored_timeseries": {
+          "format": "csv",
+          "description": "모니터링 데이터",
+          "sample_data": "TIMESTAMP,VAR\n2025-05-01T00:00:00Z,100"
+        }
+      },
+      "monitored_timeseries": {
+        "format": "csv",
+        "description": "2025-05-01 00:00~13:53 기간 동안의 슬라브 두께 및 공정 변수 모니터링 결과 (2시간 간격)",
+        "sample_data": "TIMESTAMP,SLAB_THICKNESS,CASTING_SPEED,COOLING_WATER_FLOW,MOLD_LEVEL,TEMPERATURE,SURFACE_DEFECTS\n2025-05-01T00:00:00Z,230.2,1.00,200.5,100.2,1560.2,0\n2025-05-01T02:00:00Z,230.1,1.00,200.1,100.3,1560.1,0\n2025-05-01T04:00:00Z,230.0,1.00,199.9,100.1,1560.0,0\n2025-05-01T06:00:00Z,229.9,1.00,199.7,100.0,1559.8,1\n2025-05-01T08:00:00Z,230.1,1.00,199.5,100.2,1560.1,1\n2025-05-01T10:00:00Z,230.3,1.00,199.3,100.5,1560.3,1\n2025-05-01T12:00:00Z,230.2,1.00,199.2,100.3,1560.2,2\n2025-05-01T13:53:20Z,230.02,1.00,199.8,100.1,1560.0,1"
       }
     },
     "step_4_orchestration_to_prediction": {
