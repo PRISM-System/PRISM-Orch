@@ -157,6 +157,22 @@
           "industry": "battery",
           "process": "Aging",
           "priority": "high"
+        },
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T00:00:00Z",
+            "end": "2025-05-01T12:00:00Z"
+          },
+          "process": "Aging",
+          "target_variable": "SOH",
+          "source_variables": [
+            "SOH",
+            "SOC",
+            "CAPACITY",
+            "TEMPERATURE",
+            "HUMIDITY",
+            "AGING_DAYS"
+          ]
         }
       },
       "response": {
@@ -405,13 +421,23 @@
           },
           "next_step": "control_optimization"
         },
-        "next_agent_recommendation": "Predictive Agent"
+        "next_agent_recommendation": "Predictive Agent",
+        "monitored_timeseries": {
+          "format": "csv",
+          "description": "2025-05-01 06:00~12:00 기간 동안의 SOH 및 공정 변수 모니터링 결과 (1시간 간격)",
+          "sample_data": "TIMESTAMP,SOH,SOC,CAPACITY,TEMPERATURE,HUMIDITY,AGING_DAYS\n2025-05-01T06:00:00Z,99.8,48.2,2985,48.2,45.8,7\n2025-05-01T07:00:00Z,99.4,48.3,2970,48.2,45.8,7\n2025-05-01T08:00:00Z,99.0,48.4,2955,48.2,45.8,7\n2025-05-01T09:00:00Z,98.6,48.5,2940,48.2,45.8,7\n2025-05-01T10:00:00Z,98.2,48.5,2930,48.2,45.8,7\n2025-05-01T11:00:00Z,97.8,48.5,2920,48.2,45.8,7\n2025-05-01T12:00:00Z,97.2,48.5,2915,48.2,45.8,7"
+        }
       },
       "response": {
         "status": "success",
         "workflow_id": "wf_battery_aging_003",
         "message": "모니터링 완료. 예측 분석 시작.",
         "next_agent": "Predictive Agent"
+      },
+      "monitored_timeseries": {
+        "format": "csv",
+        "description": "2025-05-01 06:00~12:00 기간 동안의 SOH 및 공정 변수 모니터링 결과 (1시간 간격)",
+        "sample_data": "TIMESTAMP,SOH,SOC,CAPACITY,TEMPERATURE,HUMIDITY,AGING_DAYS\n2025-05-01T06:00:00Z,99.8,48.2,2985,48.2,45.8,7\n2025-05-01T07:00:00Z,99.4,48.3,2970,48.2,45.8,7\n2025-05-01T08:00:00Z,99.0,48.4,2955,48.2,45.8,7\n2025-05-01T09:00:00Z,98.6,48.5,2940,48.2,45.8,7\n2025-05-01T10:00:00Z,98.2,48.5,2930,48.2,45.8,7\n2025-05-01T11:00:00Z,97.8,48.5,2920,48.2,45.8,7\n2025-05-01T12:00:00Z,97.2,48.5,2915,48.2,45.8,7"
       }
     },
     "step_4_orchestration_to_predictive": {
@@ -739,6 +765,11 @@
         "workflow_id": "wf_battery_aging_003",
         "message": "예측 분석 완료. 자동 제어 시작.",
         "next_agent": "AutoControl Agent"
+      },
+      "predicted_timeseries": {
+        "format": "csv",
+        "description": "향후 7일간의 SOH 및 용량 예측 결과 (제어 없이, 95% 신뢰구간 포함)",
+        "sample_data": "TIMESTAMP,SOH,SOH_LOWER_95,SOH_UPPER_95,CAPACITY,CAPACITY_LOWER_95,CAPACITY_UPPER_95\n2025-05-01T12:00:00Z,97.2,97.2,97.2,2915,2915,2915\n2025-05-02T00:00:00Z,96.0,95.7,96.3,2880,2865,2895\n2025-05-03T00:00:00Z,94.1,93.6,94.6,2823,2805,2841\n2025-05-05T00:00:00Z,92.3,91.7,92.9,2769,2748,2790\n2025-05-07T00:00:00Z,90.6,89.8,91.4,2718,2694,2742"
       }
     },
     "step_6_orchestration_to_autocontrol": {
@@ -787,7 +818,19 @@
           "revenue_loss_risk": 35000000
         },
         "control_method": "pid_with_optimization",
-        "query": "예측 결과 조치 없이 55분 경과 시 코팅 두께 편차가 ±18.5 μm에서 ±32.7 μm로 악화되고, 불량률이 43.8%로 증가하여 약 4,500만원의 손실이 예상됩니다. 코팅 두께를 목표값 85 μm로 안정화하고 편차를 ±10 μm 이내로 억제하기 위한 최적 제어 파라미터(슬러리 점도, 코팅 속도, 건조 온도)를 계산하고 안전하게 적용해주세요."
+        "query": "예측 결과 조치 없이 55분 경과 시 코팅 두께 편차가 ±18.5 μm에서 ±32.7 μm로 악화되고, 불량률이 43.8%로 증가하여 약 4,500만원의 손실이 예상됩니다. 코팅 두께를 목표값 85 μm로 안정화하고 편차를 ±10 μm 이내로 억제하기 위한 최적 제어 파라미터(슬러리 점도, 코팅 속도, 건조 온도)를 계산하고 안전하게 적용해주세요.",
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T00:00:00Z",
+            "end": "2025-05-01T12:00:00Z"
+          },
+          "process": "Aging",
+          "target_variable": "SOH",
+          "source_variables": [
+            "TEMPERATURE",
+            "HUMIDITY"
+          ]
+        }
       },
       "response": {
         "status": "success",
@@ -955,7 +998,12 @@
         "status": "success",
         "workflow_id": "wf_battery_aging_003",
         "message": "워크플로우 완료. 사용자에게 결과 전달.",
-        "next_step": "return_to_user"
+        "next_step": "return_to_user",
+        "controlled_timeseries": {
+          "format": "csv",
+          "description": "Control action results showing before/after states",
+          "sample_data": "TIMESTAMP,TEMPERATURE,HUMIDITY,SOH,CAPACITY,GRADE\n2025-05-01T12:00:00Z,48.2,45.8,97.2,2915,B\n2025-05-01T14:00:00Z,46.5,42.5,97.3,2918,B\n2025-05-01T16:00:00Z,44.5,40.0,97.6,2928,B\n2025-05-01T18:00:00Z,43.0,40.0,97.9,2937,B\n2025-05-02T00:00:00Z,43.0,40.0,97.5,2925,B\n2025-05-07T00:00:00Z,43.0,40.0,98.2,2946,A"
+        }
       }
     },
     "step_8_orchestration_to_user": {

@@ -131,6 +131,22 @@
             "CAST_2",
             "CAST_3"
           ]
+        },
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T00:00:00Z",
+            "end": "2025-05-01T13:53:20Z"
+          },
+          "process": "Casting",
+          "target_variable": "SLAB_THICKNESS",
+          "source_variables": [
+            "SLAB_THICKNESS",
+            "CASTING_SPEED",
+            "COOLING_WATER_FLOW",
+            "MOLD_LEVEL",
+            "TEMPERATURE",
+            "SURFACE_DEFECTS"
+          ]
         }
       },
       "response": {
@@ -321,6 +337,11 @@
             }
           },
           "recommended_control": true
+        },
+        "monitored_timeseries": {
+          "format": "csv",
+          "description": "2025-05-01 00:00~13:53 기간 동안의 슬라브 두께 및 공정 변수 모니터링 결과 (2시간 간격)",
+          "sample_data": "TIMESTAMP,SLAB_THICKNESS,CASTING_SPEED,COOLING_WATER_FLOW,MOLD_LEVEL,TEMPERATURE,SURFACE_DEFECTS\n2025-05-01T00:00:00Z,230.2,1.00,200.5,100.2,1560.2,0\n2025-05-01T02:00:00Z,230.1,1.00,200.1,100.3,1560.1,0\n2025-05-01T04:00:00Z,230.0,1.00,199.9,100.1,1560.0,0\n2025-05-01T06:00:00Z,229.9,1.00,199.7,100.0,1559.8,1\n2025-05-01T08:00:00Z,230.1,1.00,199.5,100.2,1560.1,1\n2025-05-01T10:00:00Z,230.3,1.00,199.3,100.5,1560.3,1\n2025-05-01T12:00:00Z,230.2,1.00,199.2,100.3,1560.2,2\n2025-05-01T13:53:20Z,230.02,1.00,199.8,100.1,1560.0,1"
         }
       },
       "response": {
@@ -348,7 +369,22 @@
           },
           "forecast_horizon": "24시간"
         },
-        "query": "모니터링 결과 압연 압력이 불안정하며 ±125 tonf 진동이 발생하고 있습니다(기준 ±80 tonf). 판재 두께 편차 ±0.8 mm로 기준(±0.3 mm) 초과하며 불량률 19.7%에 달합니다. 현재 진동 패턴이 계속될 경우 향후 60분간 압력 안정성과 제품 품질이 어떻게 악화될지 예측해주세요. 특히 두께 불량 증가를 분석해주세요."
+        "query": "모니터링 결과 압연 압력이 불안정하며 ±125 tonf 진동이 발생하고 있습니다(기준 ±80 tonf). 판재 두께 편차 ±0.8 mm로 기준(±0.3 mm) 초과하며 불량률 19.7%에 달합니다. 현재 진동 패턴이 계속될 경우 향후 60분간 압력 안정성과 제품 품질이 어떻게 악화될지 예측해주세요. 특히 두께 불량 증가를 분석해주세요.",
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T00:00:00Z",
+            "end": "2025-05-01T13:53:20Z"
+          },
+          "process": "Casting",
+          "target_variable": "THICKNESS_CPK",
+          "source_variables": [
+            "SLAB_THICKNESS",
+            "CASTING_SPEED",
+            "COOLING_WATER_FLOW",
+            "MOLD_LEVEL",
+            "TEMPERATURE"
+          ]
+        }
       },
       "response": {
         "status": "success",
@@ -556,7 +592,12 @@
         "status": "success",
         "workflow_id": "wf_steel_casting_20250501_001",
         "message": "Prediction 완료. AutoControl Agent로 전달.",
-        "next_step": "control_optimization"
+        "next_step": "control_optimization",
+        "predicted_timeseries": {
+          "format": "csv",
+          "description": "향후 24시간간의 품질 지표 예측 결과 (제어 없이, 95% 신뢰구간 포함)",
+          "sample_data": "TIMESTAMP,THICKNESS_CPK,CPK_LOWER_95,CPK_UPPER_95,SURFACE_DEFECTS_RATE,SCRAP_RATE\n2025-05-01T14:00:00Z,0.31,0.31,0.31,0.668,0.18\n2025-05-02T02:00:00Z,0.22,0.18,0.26,0.78,0.26\n2025-05-02T14:00:00Z,0.15,0.11,0.19,0.85,0.34"
+        }
       }
     },
     "step_6_orchestration_to_autocontrol": {
@@ -592,7 +633,21 @@
             1565
           ]
         },
-        "query": "예측 결과 60분 후 압연 압력 진동이 ±125 tonf에서 ±218 tonf로 악화되고, 두께 불량률이 38.5%로 증가하여 약 5,800만원의 손실이 예상됩니다. 압연 압력을 목표값 1,200 tonf로 안정화하고 진동 폭을 ±80 tonf 이내로 억제하기 위한 최적 제어 파라미터(압하력, 롤 속도, 장력)를 계산하고 안전하게 적용해주세요."
+        "query": "예측 결과 60분 후 압연 압력 진동이 ±125 tonf에서 ±218 tonf로 악화되고, 두께 불량률이 38.5%로 증가하여 약 5,800만원의 손실이 예상됩니다. 압연 압력을 목표값 1,200 tonf로 안정화하고 진동 폭을 ±80 tonf 이내로 억제하기 위한 최적 제어 파라미터(압하력, 롤 속도, 장력)를 계산하고 안전하게 적용해주세요.",
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T00:00:00Z",
+            "end": "2025-05-01T13:53:20Z"
+          },
+          "process": "Casting",
+          "target_variable": "SLAB_THICKNESS",
+          "source_variables": [
+            "CASTING_SPEED",
+            "COOLING_WATER_FLOW",
+            "MOLD_LEVEL",
+            "TEMPERATURE"
+          ]
+        }
       },
       "response": {
         "status": "success",
@@ -705,7 +760,12 @@
       "response": {
         "status": "success",
         "message": "AutoControl 에이전트가 최적 제어 파라미터를 계산했습니다.",
-        "next_step": "결과를 사용자에게 반환"
+        "next_step": "결과를 사용자에게 반환",
+        "controlled_timeseries": {
+          "format": "csv",
+          "description": "제어 적용 후 공정 파라미터 및 품질 지표 변화 예측 결과 (10분 간격)",
+          "sample_data": "TIMESTAMP,CASTING_SPEED,COOLING_WATER_FLOW,MOLD_LEVEL,TEMPERATURE,THICKNESS_CPK,SURFACE_DEFECTS_RATE\n2025-05-01T14:00:00Z,1.00,199.8,100.1,1560.0,0.31,0.668\n2025-05-01T14:10:00Z,0.99,202.0,99.5,1559.0,0.35,0.58\n2025-05-01T14:20:00Z,0.98,204.0,99.0,1558.5,0.42,0.48\n2025-05-01T14:30:00Z,0.98,205.0,98.5,1558.0,0.52,0.38\n2025-05-01T14:40:00Z,0.98,205.0,98.5,1558.0,0.60,0.32"
+        }
       }
     },
     "step_8_orchestration_to_user": {

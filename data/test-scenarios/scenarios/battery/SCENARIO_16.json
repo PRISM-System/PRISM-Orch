@@ -148,6 +148,22 @@
           "industry": "battery",
           "process": "Full Production",
           "priority": "critical"
+        },
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T00:00:00Z",
+            "end": "2025-05-01T14:00:00Z"
+          },
+          "process": "Full Production",
+          "target_variable": "TEMPERATURE",
+          "source_variables": [
+            "TEMPERATURE",
+            "VOLTAGE",
+            "CURRENT",
+            "CAPACITY",
+            "SOC",
+            "INTERNAL_RESISTANCE"
+          ]
         }
       },
       "response": {
@@ -373,7 +389,12 @@
         "status": "success",
         "workflow_id": "wf_battery_production_004",
         "message": "Monitoring 완료. Predictive Agent로 전달.",
-        "next_step": "prediction_analysis"
+        "next_step": "prediction_analysis",
+        "monitored_timeseries": {
+          "format": "csv",
+          "description": "2025-05-01 08:00~14:00 기간 동안의 온도 및 배터리 상태 모니터링 결과 (1시간 간격)",
+          "sample_data": "TIMESTAMP,TEMPERATURE,VOLTAGE,CURRENT,CAPACITY,SOC,INTERNAL_RESISTANCE,SAFETY_INDEX\n2025-05-01T08:00:00Z,25.2,3.65,1.2,3050,45.2,28.5,95.3\n2025-05-01T09:00:00Z,27.5,3.68,1.3,3045,48.5,29.2,92.8\n2025-05-01T10:00:00Z,30.1,3.70,1.35,3038,52.1,30.1,89.5\n2025-05-01T11:00:00Z,32.8,3.72,1.4,3030,55.8,31.2,85.2\n2025-05-01T12:00:00Z,35.2,3.74,1.42,3021,59.2,32.5,81.3\n2025-05-01T13:00:00Z,37.1,3.75,1.45,3015,62.3,33.8,78.5\n2025-05-01T14:00:00Z,38.5,3.76,1.48,3008,65.1,35.2,76.2"
+        }
       }
     },
     "step_4_orchestration_to_prediction": {
@@ -412,7 +433,26 @@
         },
         "forecast_horizon": "6_hours",
         "model_type": "thermal_dynamics_model",
-        "query": "모니터링 결과 충방전 사이클 테스트에서 용량 유지율이 78.5%로 기준(85%)을 7.6% 미달하며 지속 저하 중입니다. 내부 저항 증가와 전해액 열화가 주요 원인입니다. 현재 추세가 계속될 경우 향후 80분간 용량과 수명이 어떻게 전개될지 예측해주세요. 특히 품질 불량 임계치 도달 시점과 리콜 가능성을 분석해주세요."
+        "query": "모니터링 결과 충방전 사이클 테스트에서 용량 유지율이 78.5%로 기준(85%)을 7.6% 미달하며 지속 저하 중입니다. 내부 저항 증가와 전해액 열화가 주요 원인입니다. 현재 추세가 계속될 경우 향후 80분간 용량과 수명이 어떻게 전개될지 예측해주세요. 특히 품질 불량 임계치 도달 시점과 리콜 가능성을 분석해주세요.",
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T08:00:00Z",
+            "end": "2025-05-01T14:00:00Z"
+          },
+          "process": "Full Production",
+          "target_variable": [
+            "TEMPERATURE",
+            "SAFETY_INDEX"
+          ],
+          "source_variables": [
+            "TEMPERATURE",
+            "VOLTAGE",
+            "CURRENT",
+            "CAPACITY",
+            "SOC",
+            "INTERNAL_RESISTANCE"
+          ]
+        }
       },
       "response": {
         "status": "success",
@@ -696,7 +736,12 @@
         "status": "success",
         "workflow_id": "wf_battery_production_004",
         "message": "Prediction 완료. AutoControl Agent로 전달.",
-        "next_step": "control_optimization"
+        "next_step": "control_optimization",
+        "predicted_timeseries": {
+          "format": "csv",
+          "description": "향후 4시간간의 온도 및 안전 지수 예측 결과 (1시간 간격, 95% 신뢰구간 포함)",
+          "sample_data": "TIMESTAMP,TEMPERATURE,TEMP_LOWER_95,TEMP_UPPER_95,VOLTAGE,SAFETY_INDEX,THERMAL_RUNAWAY_RISK\n2025-05-01T14:00:00Z,38.5,38.5,38.5,3.76,76.2,0.12\n2025-05-01T15:00:00Z,40.2,39.5,40.9,3.78,72.8,0.18\n2025-05-01T16:00:00Z,41.8,40.8,42.8,3.79,68.5,0.25\n2025-05-01T17:00:00Z,43.2,41.9,44.5,3.81,64.2,0.34\n2025-05-01T18:00:00Z,44.5,43.0,46.0,3.82,59.8,0.45"
+        }
       }
     },
     "step_6_orchestration_to_autocontrol": {
@@ -737,7 +782,22 @@
           "production_loss_risk": 55000000
         },
         "control_method": "adaptive_pid_with_cooling",
-        "query": "예측 결과 48분 후 용량 유지율이 72.3%로 하락하고 내부 저항이 35% 증가하여 품질 불량 및 리콜 위험이 높아집니다. 약 6,200만원의 손실이 예상됩니다. 용량 유지율을 목표치 85% 이상으로 회복하기 위한 최적 제어 파라미터(충전 전류, 전압 범위, 온도 관리)를 계산하고 안전하게 적용해주세요."
+        "query": "예측 결과 48분 후 용량 유지율이 72.3%로 하락하고 내부 저항이 35% 증가하여 품질 불량 및 리콜 위험이 높아집니다. 약 6,200만원의 손실이 예상됩니다. 용량 유지율을 목표치 85% 이상으로 회복하기 위한 최적 제어 파라미터(충전 전류, 전압 범위, 온도 관리)를 계산하고 안전하게 적용해주세요.",
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T08:00:00Z",
+            "end": "2025-05-01T14:00:00Z"
+          },
+          "process": "Full Production",
+          "target_variable": "TEMPERATURE",
+          "source_variables": [
+            "COOLING_RATE",
+            "FAN_SPEED",
+            "CURRENT",
+            "TEMPERATURE",
+            "SAFETY_INDEX"
+          ]
+        }
       },
       "response": {
         "status": "success",
@@ -1104,7 +1164,12 @@
         "status": "success",
         "workflow_id": "wf_battery_production_004",
         "message": "AutoControl 완료. ComplianceCheck Agent로 전달.",
-        "next_step": "compliance_verification"
+        "next_step": "compliance_verification",
+        "controlled_timeseries": {
+          "format": "csv",
+          "description": "제어 적용 후 향후 4시간간의 온도 및 제어 변수 변화 예측 결과 (1시간 간격)",
+          "sample_data": "TIMESTAMP,TEMPERATURE,COOLING_RATE,FAN_SPEED,CURRENT,VOLTAGE,SAFETY_INDEX\n2025-05-01T14:00:00Z,38.5,15.2,45.0,1.48,3.76,76.2\n2025-05-01T15:00:00Z,35.8,22.5,65.0,1.25,3.72,82.5\n2025-05-01T16:00:00Z,32.2,22.5,65.0,1.15,3.69,88.3\n2025-05-01T17:00:00Z,29.5,22.5,65.0,1.10,3.67,92.1\n2025-05-01T18:00:00Z,27.8,22.5,65.0,1.08,3.65,94.5"
+        }
       }
     },
     "step_8_orchestration_to_compliance": {
@@ -1154,7 +1219,26 @@
           "UL 1642 (리튬 배터리 안전 표준)",
           "산업안전보건법 (Occupational Safety and Health Act)"
         ],
-        "query": "배터리 충방전 제어 조치가 완료되었습니다. 충전 전류를 조정하고 전압 범위 및 온도 관리를 최적화했습니다. 이 제어 조치가 전기용품안전관리법 배터리 안전 기준, UN38.3 운송 안전 기준, KC 인증 성능 요구사항 등 관련 규제를 모두 준수하는지 검증해주세요. 제어 후 용량 유지율 86.2%, 내부 저항 22 mΩ로 예상됩니다."
+        "query": "배터리 충방전 제어 조치가 완료되었습니다. 충전 전류를 조정하고 전압 범위 및 온도 관리를 최적화했습니다. 이 제어 조치가 전기용품안전관리법 배터리 안전 기준, UN38.3 운송 안전 기준, KC 인증 성능 요구사항 등 관련 규제를 모두 준수하는지 검증해주세요. 제어 후 용량 유지율 86.2%, 내부 저항 22 mΩ로 예상됩니다.",
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T14:00:00Z",
+            "end": "2025-05-01T18:00:00Z"
+          },
+          "process": "Full Production",
+          "target_variable": [
+            "TEMPERATURE",
+            "VOLTAGE",
+            "SAFETY_INDEX"
+          ],
+          "source_variables": [
+            "TEMPERATURE",
+            "VOLTAGE",
+            "CURRENT",
+            "COOLING_RATE",
+            "FAN_SPEED"
+          ]
+        }
       },
       "response": {
         "status": "success",
@@ -1364,7 +1448,12 @@
         "status": "success",
         "workflow_id": "wf_battery_production_004",
         "message": "워크플로우 완료. 사용자에게 결과 전달.",
-        "next_step": "return_to_user"
+        "next_step": "return_to_user",
+        "compliance_timeseries": {
+          "format": "csv",
+          "description": "제어 적용 후 규제 준수 상태 변화 예측 (1시간 간격, 각 규제별 준수율 포함)",
+          "sample_data": "TIMESTAMP,TEMPERATURE,VOLTAGE,SAFETY_INDEX,UN_38_3_COMPLIANCE,IEC_62133_COMPLIANCE,UL_1642_COMPLIANCE,OVERALL_COMPLIANCE_RATE\n2025-05-01T14:00:00Z,38.5,3.76,76.2,VIOLATED,VIOLATED,WARNING,0.0\n2025-05-01T15:00:00Z,35.8,3.72,82.5,COMPLIANT,COMPLIANT,COMPLIANT,100.0\n2025-05-01T16:00:00Z,32.2,3.69,88.3,COMPLIANT,COMPLIANT,COMPLIANT,100.0\n2025-05-01T17:00:00Z,29.5,3.67,92.1,COMPLIANT,COMPLIANT,COMPLIANT,100.0\n2025-05-01T18:00:00Z,27.8,3.65,94.5,COMPLIANT,COMPLIANT,COMPLIANT,100.0"
+        }
       }
     },
     "step_10_orchestration_to_user": {

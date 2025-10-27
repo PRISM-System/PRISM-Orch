@@ -149,6 +149,21 @@
           "industry": "chemical",
           "process": "Full Process",
           "priority": "critical"
+        },
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T00:00:00Z",
+            "end": "2025-05-01T16:00:00Z"
+          },
+          "process": "Full Process",
+          "target_variable": "CATALYST_RATIO",
+          "source_variables": [
+            "CATALYST_RATIO",
+            "VOC_EMISSION",
+            "PRODUCTION_RATE",
+            "REACTOR_TEMP",
+            "CONVERSION_RATE"
+          ]
         }
       },
       "response": {
@@ -434,7 +449,12 @@
         "status": "success",
         "workflow_id": "wf_chem_full_004",
         "message": "Monitoring 완료. Predictive Agent로 전달.",
-        "next_step": "prediction_analysis"
+        "next_step": "prediction_analysis",
+        "monitored_timeseries": {
+          "format": "csv",
+          "description": "2025-05-01 09:00~16:00 기간 동안의 촉매 비율 및 VOC 배출 모니터링 결과 (1시간 간격)",
+          "sample_data": "TIMESTAMP,CATALYST_RATIO,VOC_EMISSION,PRODUCTION_RATE,REACTOR_TEMP,CONVERSION_RATE\n2025-05-01T09:00:00Z,0.28,28.5,48.2,253.1,91.5\n2025-05-01T10:00:00Z,0.30,32.1,50.5,255.8,92.1\n2025-05-01T11:00:00Z,0.32,36.2,52.3,258.2,92.8\n2025-05-01T12:00:00Z,0.33,39.8,53.8,259.5,93.2\n2025-05-01T13:00:00Z,0.35,42.5,54.9,260.3,93.7\n2025-05-01T14:00:00Z,0.36,45.1,55.6,260.8,94.0\n2025-05-01T15:00:00Z,0.37,46.8,56.2,261.2,94.1\n2025-05-01T16:00:00Z,0.38,48.2,56.8,261.5,94.2"
+        }
       }
     },
     "step_4_orchestration_to_prediction": {
@@ -476,7 +496,26 @@
         },
         "forecast_horizon": "4_hours",
         "model_type": "lstm_with_constraint",
-        "query": "모니터링 결과 촉매 투입 비율이 0.42%로 임계치(0.40%)를 5% 초과하여 지속 증가 중입니다. 생산성은 양호하나 VOC 배출량이 152 kg/h로 규제 한계(120 kg/h)를 26.7% 초과하여 K-REACH 위반 상태입니다. 현재 추세가 계속될 경우 향후 60분간 VOC 배출과 환경 영향이 어떻게 전개될지 예측해주세요. 특히 규제 위반 심화 정도와 예상 벌금 규모를 분석해주세요."
+        "query": "모니터링 결과 촉매 투입 비율이 0.42%로 임계치(0.40%)를 5% 초과하여 지속 증가 중입니다. 생산성은 양호하나 VOC 배출량이 152 kg/h로 규제 한계(120 kg/h)를 26.7% 초과하여 K-REACH 위반 상태입니다. 현재 추세가 계속될 경우 향후 60분간 VOC 배출과 환경 영향이 어떻게 전개될지 예측해주세요. 특히 규제 위반 심화 정도와 예상 벌금 규모를 분석해주세요.",
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T09:00:00Z",
+            "end": "2025-05-01T16:00:00Z"
+          },
+          "process": "Full Process",
+          "target_variable": [
+            "CATALYST_RATIO",
+            "VOC_EMISSION",
+            "PRODUCTION_RATE"
+          ],
+          "source_variables": [
+            "CATALYST_RATIO",
+            "VOC_EMISSION",
+            "PRODUCTION_RATE",
+            "REACTOR_TEMP",
+            "CONVERSION_RATE"
+          ]
+        }
       },
       "response": {
         "status": "success",
@@ -787,7 +826,12 @@
         "status": "success",
         "workflow_id": "wf_chem_full_004",
         "message": "Prediction 완료. AutoControl Agent로 전달.",
-        "next_step": "control_optimization"
+        "next_step": "control_optimization",
+        "predicted_timeseries": {
+          "format": "csv",
+          "description": "향후 4시간간의 촉매 비율 및 VOC 배출 예측 결과 (1시간 간격, 95% 신뢰구간 포함)",
+          "sample_data": "TIMESTAMP,CATALYST_RATIO,CATALYST_RATIO_LOWER_95,CATALYST_RATIO_UPPER_95,VOC_EMISSION,VOC_EMISSION_LOWER_95,VOC_EMISSION_UPPER_95,PRODUCTION_RATE\n2025-05-01T16:00:00Z,0.380,0.380,0.380,48.2,48.2,48.2,56.8\n2025-05-01T17:00:00Z,0.395,0.388,0.402,52.1,50.3,53.9,58.2\n2025-05-01T18:00:00Z,0.408,0.399,0.417,55.8,53.6,58.0,59.5\n2025-05-01T19:00:00Z,0.419,0.408,0.430,59.3,56.7,61.9,60.7\n2025-05-01T20:00:00Z,0.428,0.415,0.441,62.6,59.5,65.7,61.8"
+        }
       }
     },
     "step_6_orchestration_to_autocontrol": {
@@ -840,7 +884,22 @@
           "penalty_risk": "5억원 이상"
         },
         "control_method": "mpc_with_constraint",
-        "query": "예측 결과 35분 후 VOC 배출량이 규제 한계를 40.5% 초과하고 K-REACH 위반 벌금이 약 8,500만원으로 예상됩니다. 촉매 투입 비율을 최적값 0.32%로 감소시키고 VOC 배출을 규제 한계 이내로 낮추기 위한 최적 제어 파라미터(CATALYST_RATIO, REACTOR_TEMP, FEED_RATE)를 계산하고 안전하게 적용해주세요."
+        "query": "예측 결과 35분 후 VOC 배출량이 규제 한계를 40.5% 초과하고 K-REACH 위반 벌금이 약 8,500만원으로 예상됩니다. 촉매 투입 비율을 최적값 0.32%로 감소시키고 VOC 배출을 규제 한계 이내로 낮추기 위한 최적 제어 파라미터(CATALYST_RATIO, REACTOR_TEMP, FEED_RATE)를 계산하고 안전하게 적용해주세요.",
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T09:00:00Z",
+            "end": "2025-05-01T16:00:00Z"
+          },
+          "process": "Full Process",
+          "target_variable": "VOC_EMISSION",
+          "source_variables": [
+            "CATALYST_RATIO",
+            "REACTOR_TEMP",
+            "FEED_RATE",
+            "VOC_EMISSION",
+            "PRODUCTION_RATE"
+          ]
+        }
       },
       "response": {
         "status": "success",
@@ -1161,7 +1220,12 @@
         "status": "success",
         "workflow_id": "wf_chem_full_004",
         "message": "AutoControl 완료. ComplianceCheck Agent로 전달.",
-        "next_step": "compliance_verification"
+        "next_step": "compliance_verification",
+        "controlled_timeseries": {
+          "format": "csv",
+          "description": "제어 적용 후 향후 2시간간의 촉매 비율 및 VOC 배출 변화 예측 결과 (30분 간격)",
+          "sample_data": "TIMESTAMP,CATALYST_RATIO,REACTOR_TEMP,FEED_RATE,VOC_EMISSION,PRODUCTION_RATE,CONVERSION_RATE\n2025-05-01T16:00:00Z,0.380,261.5,98.2,48.2,56.8,94.2\n2025-05-01T16:30:00Z,0.315,256.8,95.5,39.8,53.2,92.8\n2025-05-01T17:00:00Z,0.288,254.2,94.2,35.5,51.5,91.8\n2025-05-01T17:30:00Z,0.280,252.8,93.8,32.8,50.8,91.5\n2025-05-01T18:00:00Z,0.278,252.5,93.5,31.5,50.5,91.3"
+        }
       }
     },
     "step_8_orchestration_to_compliance": {
@@ -1202,7 +1266,26 @@
           "화학물질관리법 (Chemicals Control Act)",
           "환경오염시설 통합관리법 (Integrated Environmental Control)"
         ],
-        "query": "촉매 투입 비율 제어 조치가 완료되었습니다. 촉매 비율을 0.42%에서 0.32%로 23.8% 감소시키고 반응기 온도 및 원료 투입량을 조정했습니다. 이 제어 조치가 K-REACH 화학물질 관리, 대기환경보전법 VOC 배출 기준, 화학물질안전원 안전 기준 등 관련 규제를 모두 준수하는지 검증해주세요. 제어 후 VOC 배출량 105 kg/h, 생산율 78 ton/h로 예상됩니다."
+        "query": "촉매 투입 비율 제어 조치가 완료되었습니다. 촉매 비율을 0.42%에서 0.32%로 23.8% 감소시키고 반응기 온도 및 원료 투입량을 조정했습니다. 이 제어 조치가 K-REACH 화학물질 관리, 대기환경보전법 VOC 배출 기준, 화학물질안전원 안전 기준 등 관련 규제를 모두 준수하는지 검증해주세요. 제어 후 VOC 배출량 105 kg/h, 생산율 78 ton/h로 예상됩니다.",
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T16:00:00Z",
+            "end": "2025-05-01T18:00:00Z"
+          },
+          "process": "Full Process",
+          "target_variable": [
+            "VOC_EMISSION",
+            "CATALYST_RATIO",
+            "PRODUCTION_RATE"
+          ],
+          "source_variables": [
+            "CATALYST_RATIO",
+            "REACTOR_TEMP",
+            "FEED_RATE",
+            "VOC_EMISSION",
+            "PRODUCTION_RATE"
+          ]
+        }
       },
       "response": {
         "status": "success",
@@ -1391,7 +1474,12 @@
         "status": "success",
         "workflow_id": "wf_chem_full_004",
         "message": "워크플로우 완료. 사용자에게 결과 전달.",
-        "next_step": "return_to_user"
+        "next_step": "return_to_user",
+        "compliance_timeseries": {
+          "format": "csv",
+          "description": "제어 적용 후 규제 준수 상태 변화 예측 (30분 간격, 각 규제별 준수율 포함)",
+          "sample_data": "TIMESTAMP,CATALYST_RATIO,VOC_EMISSION,K_REACH_VOC_COMPLIANCE,AIR_CONSERVATION_COMPLIANCE,ISO_14001_COMPLIANCE,OVERALL_COMPLIANCE_RATE\n2025-05-01T16:00:00Z,0.380,48.2,VIOLATED,VIOLATED,WARNING,0.0\n2025-05-01T16:30:00Z,0.315,39.8,COMPLIANT,COMPLIANT,COMPLIANT,100.0\n2025-05-01T17:00:00Z,0.288,35.5,COMPLIANT,COMPLIANT,COMPLIANT,100.0\n2025-05-01T17:30:00Z,0.280,32.8,COMPLIANT,COMPLIANT,COMPLIANT,100.0\n2025-05-01T18:00:00Z,0.278,31.5,COMPLIANT,COMPLIANT,COMPLIANT,100.0"
+        }
       }
     },
     "step_10_orchestration_to_user": {

@@ -130,6 +130,22 @@
             "PROD_L1",
             "PROD_L2"
           ]
+        },
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T00:00:00Z",
+            "end": "2025-05-01T13:53:20Z"
+          },
+          "process": "full_production",
+          "target_variable": "TEMPERATURE",
+          "source_variables": [
+            "TEMPERATURE",
+            "PRESSURE",
+            "OXYGEN_FLOW",
+            "EMISSION_LEVEL",
+            "ENERGY_CONSUMPTION",
+            "QUALITY_INDEX"
+          ]
         }
       },
       "response": {
@@ -397,7 +413,12 @@
         "status": "success",
         "workflow_id": "wf_steel_production_20250501_001",
         "message": "Monitoring 완료. Predictive Agent로 전달.",
-        "next_step": "prediction_analysis"
+        "next_step": "prediction_analysis",
+        "monitored_timeseries": {
+          "format": "csv",
+          "description": "2025-05-01 00:00~13:53 기간 동안의 온도 및 배출 수준 모니터링 결과 (2시간 간격)",
+          "sample_data": "TIMESTAMP,TEMPERATURE,PRESSURE,OXYGEN_FLOW,EMISSION_LEVEL,ENERGY_CONSUMPTION,QUALITY_INDEX,COMPLIANCE_STATUS\n2025-05-01T00:00:00Z,1648.2,235.8,495.2,98.5,485.3,94.8,1\n2025-05-01T02:00:00Z,1648.8,237.1,496.8,102.3,490.2,94.5,1\n2025-05-01T04:00:00Z,1649.3,238.5,497.9,105.8,495.1,94.1,1\n2025-05-01T06:00:00Z,1649.7,239.2,498.8,109.2,498.8,93.7,1\n2025-05-01T08:00:00Z,1649.9,240.1,499.5,112.8,501.5,93.4,1\n2025-05-01T10:00:00Z,1650.2,240.8,500.0,115.2,503.2,93.1,0\n2025-05-01T12:00:00Z,1650.5,241.2,500.1,117.5,505.8,92.9,0\n2025-05-01T13:53:20Z,1650.08,240.5,500.2,116.24,502.38,93.2,0"
+        }
       }
     },
     "step_4_orchestration_to_prediction": {
@@ -419,7 +440,27 @@
           },
           "forecast_horizon": "24시간"
         },
-        "query": "모니터링 결과 에너지 소비가 348 kWh/ton으로 규제 한계(320 kWh/ton)를 8.8% 초과하여 탄소 배출 규제 위반 상태입니다. 냉각 시스템 과부하와 압연 효율 저하가 원인입니다. 현재 추세가 계속될 경우 향후 65분간 에너지 소비와 탄소 배출이 어떻게 전개될지 예측해주세요. 특히 규제 위반 심화와 예상 벌금을 분석해주세요."
+        "query": "모니터링 결과 에너지 소비가 348 kWh/ton으로 규제 한계(320 kWh/ton)를 8.8% 초과하여 탄소 배출 규제 위반 상태입니다. 냉각 시스템 과부하와 압연 효율 저하가 원인입니다. 현재 추세가 계속될 경우 향후 65분간 에너지 소비와 탄소 배출이 어떻게 전개될지 예측해주세요. 특히 규제 위반 심화와 예상 벌금을 분석해주세요.",
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T06:00:00Z",
+            "end": "2025-05-01T13:53:20Z"
+          },
+          "process": "full_production",
+          "target_variable": [
+            "TEMPERATURE",
+            "EMISSION_LEVEL",
+            "ENERGY_CONSUMPTION"
+          ],
+          "source_variables": [
+            "TEMPERATURE",
+            "PRESSURE",
+            "OXYGEN_FLOW",
+            "EMISSION_LEVEL",
+            "ENERGY_CONSUMPTION",
+            "COMPLIANCE_STATUS"
+          ]
+        }
       },
       "response": {
         "status": "success",
@@ -691,7 +732,12 @@
         "status": "success",
         "workflow_id": "wf_steel_production_20250501_001",
         "message": "Prediction 완료. AutoControl Agent로 전달.",
-        "next_step": "control_optimization"
+        "next_step": "control_optimization",
+        "predicted_timeseries": {
+          "format": "csv",
+          "description": "향후 24시간간의 온도, 배출 수준 및 에너지 소비 예측 결과 (6시간 간격, 95% 신뢰구간 포함)",
+          "sample_data": "TIMESTAMP,TEMPERATURE,TEMP_LOWER_95,TEMP_UPPER_95,EMISSION_LEVEL,EMISSION_LOWER_95,EMISSION_UPPER_95,ENERGY_CONSUMPTION,COMPLIANCE_PROBABILITY\n2025-05-01T13:53:20Z,1650.08,1650.08,1650.08,116.24,116.24,116.24,502.38,0.568\n2025-05-01T19:53:20Z,1650.57,1649.82,1651.32,123.68,119.45,127.91,509.42,0.42\n2025-05-02T01:53:20Z,1651.06,1650.12,1652.00,131.12,126.23,136.01,516.46,0.18\n2025-05-02T07:53:20Z,1651.55,1650.45,1652.65,138.24,132.88,143.60,523.28,0.08\n2025-05-02T13:53:20Z,1652.04,1650.88,1653.20,146.00,140.12,151.88,530.54,0.05"
+        }
       }
     },
     "step_6_orchestration_to_autocontrol": {
@@ -725,7 +771,22 @@
           "EMISSION_LEVEL_max": 120.0,
           "ENERGY_CONSUMPTION_max": 550.0
         },
-        "query": "예측 결과 38분 후 에너지 소비가 규제 한계를 15.7% 초과하고 탄소 배출 규제 위반이 심화됩니다. 약 8,300만원의 손실 및 벌금이 예상됩니다. 에너지 소비를 규제 한계 이내(320 kWh/ton)로 낮추기 위한 최적 제어 파라미터(압연 속도, 가열 온도, 냉각 유량)를 계산하고 안전하게 적용해주세요."
+        "query": "예측 결과 38분 후 에너지 소비가 규제 한계를 15.7% 초과하고 탄소 배출 규제 위반이 심화됩니다. 약 8,300만원의 손실 및 벌금이 예상됩니다. 에너지 소비를 규제 한계 이내(320 kWh/ton)로 낮추기 위한 최적 제어 파라미터(압연 속도, 가열 온도, 냉각 유량)를 계산하고 안전하게 적용해주세요.",
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T06:00:00Z",
+            "end": "2025-05-01T13:53:20Z"
+          },
+          "process": "full_production",
+          "target_variable": "EMISSION_LEVEL",
+          "source_variables": [
+            "TEMPERATURE",
+            "OXYGEN_FLOW",
+            "PRODUCTION_RATE",
+            "EMISSION_LEVEL",
+            "ENERGY_CONSUMPTION"
+          ]
+        }
       },
       "response": {
         "status": "success",
@@ -991,7 +1052,12 @@
         "status": "success",
         "workflow_id": "wf_steel_production_20250501_001",
         "message": "AutoControl 완료. ComplianceCheck Agent로 전달.",
-        "next_step": "compliance_verification"
+        "next_step": "compliance_verification",
+        "controlled_timeseries": {
+          "format": "csv",
+          "description": "제어 적용 후 향후 24시간간의 온도, 배출 및 제어 변수 변화 예측 결과 (6시간 간격)",
+          "sample_data": "TIMESTAMP,TEMPERATURE,OXYGEN_FLOW,PRODUCTION_RATE,EMISSION_LEVEL,ENERGY_CONSUMPTION,QUALITY_INDEX\n2025-05-01T13:53:20Z,1650.08,500.2,200.0,116.24,502.38,93.2\n2025-05-01T19:53:20Z,1648.5,495.0,198.5,105.2,491.5,94.1\n2025-05-02T01:53:20Z,1648.0,495.0,198.5,98.5,487.2,94.8\n2025-05-02T07:53:20Z,1648.0,495.0,198.5,97.2,486.8,95.0\n2025-05-02T13:53:20Z,1648.0,495.0,198.5,96.8,486.5,95.1"
+        }
       }
     },
     "step_8_orchestration_to_compliance": {
@@ -1009,7 +1075,27 @@
           "ENERGY_CONSUMPTION": 487.2,
           "QUALITY_INDEX": 94.8
         },
-        "query": "에너지 절감 제어 조치가 완료되었습니다. 압연 속도, 가열 온도, 냉각 유량을 최적화하여 에너지 소비를 348 kWh/ton에서 298 kWh/ton으로 14.4% 감소시켰습니다. 이 제어 조치가 탄소 배출 저감 의무, 에너지 효율 목표제, 온실가스 배출권 거래제 등 관련 규제를 모두 준수하는지 검증해주세요. 제어 후 탄소 배출 212 kg-CO2/ton으로 예상됩니다."
+        "query": "에너지 절감 제어 조치가 완료되었습니다. 압연 속도, 가열 온도, 냉각 유량을 최적화하여 에너지 소비를 348 kWh/ton에서 298 kWh/ton으로 14.4% 감소시켰습니다. 이 제어 조치가 탄소 배출 저감 의무, 에너지 효율 목표제, 온실가스 배출권 거래제 등 관련 규제를 모두 준수하는지 검증해주세요. 제어 후 탄소 배출 212 kg-CO2/ton으로 예상됩니다.",
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T13:53:20Z",
+            "end": "2025-05-02T13:53:20Z"
+          },
+          "process": "full_production",
+          "target_variable": [
+            "TEMPERATURE",
+            "EMISSION_LEVEL",
+            "ENERGY_CONSUMPTION"
+          ],
+          "source_variables": [
+            "TEMPERATURE",
+            "OXYGEN_FLOW",
+            "PRODUCTION_RATE",
+            "EMISSION_LEVEL",
+            "ENERGY_CONSUMPTION",
+            "QUALITY_INDEX"
+          ]
+        }
       },
       "response": {
         "status": "success",
@@ -1152,7 +1238,12 @@
       "response": {
         "status": "success",
         "message": "ComplianceCheck 에이전트가 규제 준수 검증을 완료했습니다.",
-        "next_step": "결과를 사용자에게 반환"
+        "next_step": "결과를 사용자에게 반환",
+        "compliance_timeseries": {
+          "format": "csv",
+          "description": "제어 적용 후 규제 준수 상태 변화 예측 (6시간 간격, 각 규제별 준수율 포함)",
+          "sample_data": "TIMESTAMP,TEMPERATURE,EMISSION_LEVEL,ENERGY_CONSUMPTION,REG_ENV_001_COMPLIANCE,REG_ENV_002_COMPLIANCE,REG_SAFE_001_COMPLIANCE,OVERALL_COMPLIANCE_RATE\n2025-05-01T13:53:20Z,1650.08,116.24,502.38,VIOLATED,VIOLATED,COMPLIANT,33.3\n2025-05-01T19:53:20Z,1648.5,105.2,491.5,COMPLIANT,COMPLIANT,COMPLIANT,100.0\n2025-05-02T01:53:20Z,1648.0,98.5,487.2,COMPLIANT,COMPLIANT,COMPLIANT,100.0\n2025-05-02T07:53:20Z,1648.0,97.2,486.8,COMPLIANT,COMPLIANT,COMPLIANT,100.0\n2025-05-02T13:53:20Z,1648.0,96.8,486.5,COMPLIANT,COMPLIANT,COMPLIANT,100.0"
+        }
       }
     },
     "step_10_orchestration_to_user": {

@@ -1,7 +1,8 @@
 {
   "metadata": {
-    "version": "1.0",
+    "version": "1.1",
     "created_date": "2025-10-14",
+    "last_updated": "2025-10-20",
     "description": "PRISM test scenario index - 5 industries, 4 workflow levels, 20 total scenarios",
     "total_scenarios": 20,
     "industries": [
@@ -269,11 +270,16 @@
       "dataset_file": "datasets/automotive_painting_002.csv",
       "query_template": "도장 부스의 HUMIDITY가 계속 상승하고 있습니다. 도막 품질에 미칠 영향을 예측해주세요.",
       "key_sensors": [
+        "BOOTH_ID",
         "TEMPERATURE",
         "HUMIDITY",
         "SPRAY_PRESSURE",
         "PAINT_FLOW_RATE",
-        "BOOTH_AIRFLOW"
+        "BOOTH_AIRFLOW",
+        "ATOMIZATION_QUALITY",
+        "FILM_THICKNESS",
+        "OVERSPRAY_RATE",
+        "CURING_TEMP"
       ],
       "expected_agents": [
         "Orchestration",
@@ -295,11 +301,16 @@
       "dataset_file": "datasets/automotive_press_003.csv",
       "query_template": "프레스 라인의 PRESS_FORCE가 불균형합니다. 자동으로 조정하여 불량률을 줄여주세요.",
       "key_sensors": [
+        "PRESS_ID",
         "PRESS_FORCE",
         "DIE_TEMPERATURE",
         "STROKE_SPEED",
         "BLANK_THICKNESS",
-        "LUBRICATION"
+        "LUBRICATION",
+        "FORMING_DEPTH",
+        "SPRING_BACK",
+        "SURFACE_ROUGHNESS",
+        "DEFECT_RATE"
       ],
       "expected_agents": [
         "Orchestration",
@@ -322,11 +333,17 @@
       "dataset_file": "datasets/automotive_assembly_004.csv",
       "query_template": "조립 라인의 TORQUE가 증가 추세입니다. 예측 및 제어를 수행하고 안전 규제 준수 여부를 확인해주세요.",
       "key_sensors": [
+        "STATION_ID",
         "TORQUE",
         "PRESSURE",
         "TEMPERATURE",
         "CYCLE_TIME",
-        "DEFECT_RATE"
+        "DEFECT_RATE",
+        "TIGHTENING_ANGLE",
+        "BOLT_COUNT",
+        "POSITION_ACCURACY",
+        "QUALITY_SCORE",
+        "SAFETY_STATUS"
       ],
       "expected_agents": [
         "Orchestration",
@@ -509,10 +526,16 @@
       "dataset_file": "datasets/steel_casting_003.csv",
       "query_template": "연주 라인의 SLAB_THICKNESS가 불균일합니다. 자동으로 CASTING_SPEED를 조정해주세요.",
       "key_sensors": [
+        "CASTER_ID",
         "SLAB_THICKNESS",
         "CASTING_SPEED",
         "MOLD_WIDTH",
-        "TEMPERATURE"
+        "TEMPERATURE",
+        "COOLING_WATER_FLOW",
+        "MOLD_LEVEL",
+        "STRAND_TEMPERATURE",
+        "WITHDRAWAL_FORCE",
+        "SURFACE_DEFECTS"
       ],
       "expected_agents": [
         "Orchestration",
@@ -535,11 +558,17 @@
       "dataset_file": "datasets/steel_production_004.csv",
       "query_template": "철강 생산 라인의 TEMPERATURE가 증가 추세입니다. 예측 및 제어를 수행하고 환경 규제 준수 여부를 확인해주세요.",
       "key_sensors": [
+        "PRODUCTION_LINE",
         "TEMPERATURE",
         "PRESSURE",
         "OXYGEN_FLOW",
         "SLAG_COMPOSITION",
-        "THICKNESS"
+        "THICKNESS",
+        "PRODUCTION_RATE",
+        "QUALITY_INDEX",
+        "EMISSION_LEVEL",
+        "ENERGY_CONSUMPTION",
+        "COMPLIANCE_STATUS"
       ],
       "expected_agents": [
         "Orchestration",
@@ -739,5 +768,22 @@
     "api_endpoints": "Refer to api_endpoint.xlsx file to check API call structure for each agent",
     "realistic_scenarios": "All scenarios are based on situations that can occur in actual manufacturing sites",
     "korean_queries": "Natural language queries are written in Korean, with technical terms (process names, equipment names) in English"
+  },
+  "changelog": {
+    "v1.1": {
+      "date": "2025-10-20",
+      "changes": [
+        "Added natural language queries in Orchestration→Agent communication for all scenarios",
+        "Added natural language summary in Agent→Orchestration responses",
+        "Updated CSV column names to match actual data files for SCENARIO_10, 11, 12, 19, 20",
+        "Updated key_sensors list for SCENARIO_10, 11, 12, 19, 20 to include all CSV columns"
+      ]
+    },
+    "v1.0": {
+      "date": "2025-10-14",
+      "changes": [
+        "Initial release with 20 scenarios (5 industries × 4 workflow levels)"
+      ]
+    }
   }
 }

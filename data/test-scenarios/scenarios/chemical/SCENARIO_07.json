@@ -137,6 +137,20 @@
           "industry": "chemical",
           "process": "Refining",
           "priority": "high"
+        },
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T00:00:00Z",
+            "end": "2025-05-01T14:30:00Z"
+          },
+          "process": "Refining",
+          "target_variable": "PURITY",
+          "source_variables": [
+            "PURITY",
+            "TOWER_TEMP",
+            "REFLUX_RATIO",
+            "FEED_RATE"
+          ]
         }
       },
       "response": {
@@ -269,7 +283,12 @@
         "status": "success",
         "workflow_id": "wf_chem_refining_003",
         "message": "Monitoring 완료. Predictive Agent로 전달.",
-        "next_step": "prediction_analysis"
+        "next_step": "prediction_analysis",
+        "monitored_timeseries": {
+          "format": "csv",
+          "description": "2025-05-01 08:00~14:30 기간 동안의 순도 및 공정 변수 모니터링 결과 (30분 간격)",
+          "sample_data": "TIMESTAMP,PURITY,TOWER_TEMP,REFLUX_RATIO,FEED_RATE\n2025-05-01T08:00:00Z,99.70,148.6,2.85,5050\n2025-05-01T08:30:00Z,99.65,148.6,2.85,5050\n2025-05-01T09:00:00Z,99.60,148.6,2.85,5050\n2025-05-01T09:30:00Z,99.55,148.6,2.85,5050\n2025-05-01T10:00:00Z,99.50,148.6,2.85,5050\n2025-05-01T10:30:00Z,99.45,148.6,2.85,5050\n2025-05-01T11:00:00Z,99.40,148.6,2.85,5050\n2025-05-01T11:30:00Z,99.35,148.6,2.85,5050\n2025-05-01T12:00:00Z,99.32,148.6,2.85,5050\n2025-05-01T12:30:00Z,99.28,148.6,2.85,5050\n2025-05-01T13:00:00Z,99.26,148.6,2.85,5050\n2025-05-01T13:30:00Z,99.25,148.6,2.85,5050\n2025-05-01T14:00:00Z,99.24,148.6,2.85,5050\n2025-05-01T14:30:00Z,99.24,148.6,2.85,5050"
+        }
       }
     },
     "step_4_orchestration_to_prediction": {
@@ -306,7 +325,21 @@
         },
         "forecast_horizon": "3_hours",
         "model_type": "lstm_multivariate",
-        "query": "모니터링 결과 제품 순도가 99.24%로 목표치(99.5%) 미달이며, 지난 6.5시간 동안 -0.0034%/10분 속도로 지속 감소 중입니다. 원료 조성 변화 또는 환류비 부족이 원인으로 추정됩니다. 현재 추세가 계속될 경우 향후 3시간 동안 순도가 어떻게 변화할지 예측해주세요. 특히 품질 불량 임계치(99.0%) 도달 시점과 예상 손실 규모를 분석해주세요."
+        "query": "모니터링 결과 제품 순도가 99.24%로 목표치(99.5%) 미달이며, 지난 6.5시간 동안 -0.0034%/10분 속도로 지속 감소 중입니다. 원료 조성 변화 또는 환류비 부족이 원인으로 추정됩니다. 현재 추세가 계속될 경우 향후 3시간 동안 순도가 어떻게 변화할지 예측해주세요. 특히 품질 불량 임계치(99.0%) 도달 시점과 예상 손실 규모를 분석해주세요.",
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T00:00:00Z",
+            "end": "2025-05-01T14:30:00Z"
+          },
+          "process": "Refining",
+          "target_variable": "PURITY",
+          "source_variables": [
+            "PURITY",
+            "TOWER_TEMP",
+            "REFLUX_RATIO",
+            "FEED_RATE"
+          ]
+        }
       },
       "response": {
         "status": "success",
@@ -500,7 +533,12 @@
         "status": "success",
         "workflow_id": "wf_chem_refining_003",
         "message": "Prediction 완료. AutoControl Agent로 전달.",
-        "next_step": "control_optimization"
+        "next_step": "control_optimization",
+        "predicted_timeseries": {
+          "format": "csv",
+          "description": "Future prediction data with confidence intervals",
+          "sample_data": "TIMESTAMP,PURITY,PURITY_LOWER_95,PURITY_UPPER_95,TOWER_TEMP,REFLUX_RATIO\n2025-05-01T14:30:00Z,99.24,99.24,99.24,148.6,2.85\n2025-05-01T15:30:00Z,99.04,98.92,99.16,148.6,2.85\n2025-05-01T16:30:00Z,98.83,98.68,98.98,148.6,2.85\n2025-05-01T17:30:00Z,98.61,98.42,98.80,148.6,2.85"
+        }
       }
     },
     "step_6_orchestration_to_autocontrol": {
@@ -542,7 +580,19 @@
           "time_to_defect": "2.25_hours"
         },
         "control_method": "mpc_with_pid",
-        "query": "예측 결과 조치 없이 2시간 15분 후 순도가 98.61%로 하락하여 품질 불량 발생 확률 89%, 약 1,500만원의 손실이 예상됩니다. 순도를 목표치 99.6%로 회복하기 위한 최적 운전 조건(증류탑 온도, 환류비)을 계산하고 안전하게 적용해주세요. 제어 비용 대비 편익을 고려하여 최적 제어 시퀀스를 제시해주세요."
+        "query": "예측 결과 조치 없이 2시간 15분 후 순도가 98.61%로 하락하여 품질 불량 발생 확률 89%, 약 1,500만원의 손실이 예상됩니다. 순도를 목표치 99.6%로 회복하기 위한 최적 운전 조건(증류탑 온도, 환류비)을 계산하고 안전하게 적용해주세요. 제어 비용 대비 편익을 고려하여 최적 제어 시퀀스를 제시해주세요.",
+        "timeseries_info": {
+          "timestamp": {
+            "start": "2025-05-01T00:00:00Z",
+            "end": "2025-05-01T14:30:00Z"
+          },
+          "process": "Refining",
+          "target_variable": "PURITY",
+          "source_variables": [
+            "TOWER_TEMP",
+            "REFLUX_RATIO"
+          ]
+        }
       },
       "response": {
         "status": "success",
@@ -684,7 +734,12 @@
         "status": "success",
         "workflow_id": "wf_chem_refining_003",
         "message": "워크플로우 완료. 사용자에게 결과 전달.",
-        "next_step": "return_to_user"
+        "next_step": "return_to_user",
+        "controlled_timeseries": {
+          "format": "csv",
+          "description": "Control action results showing before/after states",
+          "sample_data": "TIMESTAMP,TOWER_TEMP,REFLUX_RATIO,PURITY,STATUS\n2025-05-01T14:30:00Z,148.6,2.85,99.24,BEFORE_CONTROL\n2025-05-01T14:40:00Z,149.3,2.95,99.32,ADJUSTING\n2025-05-01T15:00:00Z,150.2,3.05,99.45,ADJUSTING\n2025-05-01T15:30:00Z,151.2,3.15,99.52,CONTROLLED\n2025-05-01T16:00:00Z,151.2,3.15,99.58,STABLE\n2025-05-01T16:30:00Z,151.2,3.15,99.61,STABLE"
+        }
       }
     },
     "step_8_orchestration_to_user": {

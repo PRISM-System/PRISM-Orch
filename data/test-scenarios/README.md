@@ -245,14 +245,22 @@ df = pd.read_csv(f'datasets/{data_file}')
 - 템플릿은 `test_data/sample_data_templates.json` 참조
 - 이상치 삽입 시 실제 공정 상황을 반영하여 생성
 
-## 문의 Contact
+## 변경 이력 Change Log
 
-프로젝트 관련 문의:
-- **주관기관**: 서울대학교 DSBA Lab
-- **책임연구원**: 강필성 교수
-- **과제번호**: RS-2025-02214591
+### Version 1.1 (2025-10-20)
+- 모든 시나리오에 Orchestration→Agent 자연어 쿼리 추가
+- Agent→Orchestration 응답에 자연어 요약(summary) 필드 추가
+- CSV 컬럼명을 실제 데이터 파일과 일치하도록 업데이트:
+  - SCENARIO_10 (automotive_painting_002.csv)
+  - SCENARIO_11 (automotive_press_003.csv)
+  - SCENARIO_12 (automotive_assembly_004.csv)
+  - SCENARIO_19 (steel_casting_003.csv)
+  - SCENARIO_20 (steel_production_004.csv)
+
+### Version 1.0 (2025-10-14)
+- 초기 버전: 20개 시나리오 생성 (5개 산업 × 4개 워크플로우)
 
 ---
 
-**Last Updated**: 2025-10-14
-**Version**: 1.0
+**Last Updated**: 2025-10-20
+**Version**: 1.1
