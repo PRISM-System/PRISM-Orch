@@ -8,6 +8,7 @@ Mem0를 통한 장기 기억과 개인화된 상호작용을 지원합니다.
 from typing import Any, Dict, List, Optional
 import json
 import requests
+from collections import deque
 
 from prism_core.core.llm.prism_llm_service import PrismLLMService
 from prism_core.core.llm.schemas import Agent, AgentInvokeRequest, AgentResponse, LLMGenerationRequest
@@ -15,8 +16,9 @@ from prism_core.core.tools import BaseTool, ToolRequest, ToolResponse, ToolRegis
 
 from .tools.orch_tool_setup import OrchToolSetup
 from prism_core.core.agents import AgentManager, WorkflowManager
-from .endpoint_schemas import MonitoringAgentRequest, MonitoringAgentResponse, PredictionAgentRequest, PredictionAgentResponse, AutonomousControlAgentRequest, AutonomousControlAgentResponse, PlatformBaseRequest, PlatformBaseResponse
+from .endpoint_schemas import MonitoringAgentRequest, MonitoringAgentResponse, PredictionAgentRequest, PredictionAgentResponse, AutonomousControlAgentRequest, AutonomousControlAgentResponse, PlatformBaseRequest, PlatformBaseResponse, OrchestrationProgress
 from ..core.config import settings
+
 
 import sys
 
@@ -43,6 +45,7 @@ class PrismOrchestrator:
                  autonomous_control_agent_endpoint: Optional[str] = None,
                  ) -> None:
         import sys
+        self.orchestration_progress_queue = deque(maxlen=10)
         print("🔧 [STEP 1] Starting PrismOrchestrator initialization...", file=sys.stderr, flush=True)
         
         # Resolve endpoints from Orch settings or args
@@ -276,7 +279,10 @@ class PrismOrchestrator:
             print(f"❌ 자율제어 에이전트 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
             return AutonomousControlAgentResponse(result="자율제어 에이전트 자동화 테스트 중")
 
-    async def _call_platform_base(self, session_id: str, step_name: str, content: str, end_time: str, status: str, progress: int) -> PlatformBaseResponse:
+    async def _call_platform_base(
+        self, 
+        orch_progress: OrchestrationProgress,
+        ) -> PlatformBaseResponse:
         """플랫폼 기반 호출
         사용 엔드포인트 목록
             - /django/api/websocket/orchestrate/update/: 오케스트레이션 상태 전달
@@ -296,23 +302,37 @@ class PrismOrchestrator:
         "X-CSRFTOKEN": "91p6AK0OsryzHNAQqOaTnxKtDeS3uE53"
         }
 
+        # refine content to user-friendly format
+        request_msg = f"""
+        현재까지의 작업 내용을 바탕으로 현재 상태를 현장 작업자에게 요약하여 주세요.
+        {orch_progress.__repr__()}
+        """
+        refined_progress_msg = self.llm.invoke_agent(self._agent, AgentInvokeRequest(
+            prompt=request_msg,
+            max_new_tokens=256,
+            temperature=0.7,
+            stop=None,
+            use_tools=False,
+            max_tool_calls=0,
+            extra_body = {"chat_template_kwargs": {"enable_thinking": False}},
+        ))
+
         payload = {
-        "session_id": session_id,
-        "step_name": step_name,
-        "content": content,
-        "end_time": end_time,
-        "status": status,
-        "progress": progress
+        "session_id": orch_progress.session_id,
+        "step_name": orch_progress.current_step,
+        "content": refined_progress_msg.text,
+        "end_time": self._get_timestamp(),
+        "status": "running",
+        "progress": orch_progress.current_progress
         }
         try:
             resp = requests.post(self.platform_api_base, headers=headers, json=payload, timeout=10)
             resp.raise_for_status()  # HTTP 오류 발생 시 예외
             response = resp.json()       # 서버에서 JSON 응답 반환 시
-            return PlatformBaseResponse(status="success", message="WebSocket update sent")
-        except requests.RequestException as e:
-            # 네트워크 오류나 4xx/5xx 에러 처리
+            return PlatformBaseResponse(status="success", message=f"WebSocket update sent: {response}")
+        except Exception as e:
             print(f"❌ 플랫폼 기반 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
-            return PlatformBaseResponse(status="error", message="WebSocket update failed")
+            return PlatformBaseResponse(status="error", message=f"WebSocket update failed: {str(e)}")
 
     def _define_orchestration_workflow(self) -> None:
         """오케스트레이션 워크플로우를 정의합니다."""
@@ -746,6 +766,14 @@ class PrismOrchestrator:
             # session_id가 없으면 user_id를 기반으로 생성
             if not session_id:
                 session_id = user_id or f"task_{self._generate_execution_id()}"
+                curr_orch_prog = OrchestrationProgress(
+                    session_id=session_id,
+                    current_step="Query Refinement",
+                    status="running",
+                    current_progress=0,
+                    user_request=prompt
+                )
+                self.orchestration_progress_queue.append(curr_orch_prog)
             
             # Ensure agent is registered (already done in __init__, but double-check)
             if not self._agent:
@@ -764,43 +792,32 @@ class PrismOrchestrator:
                     print(f"   - {tool['name']}: {tool['description'][:50]}...", file=sys.stderr, flush=True)
             
             # Create agent invoke request
-            request = AgentInvokeRequest(
-                prompt=prompt,
+            refinement_request_msg = f"""
+            사용자 요청을 수행하기 위한 오케스트레이션 계획을 작성해주세요.
+            사용자 요청: {prompt}
+            현재 수행 내역: {curr_orch_prog.__repr__()}
+            """
+            refinement_request = AgentInvokeRequest(
+                prompt=refinement_request_msg,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 stop=stop,
                 use_tools=use_tools,
                 max_tool_calls=max_tool_calls,
-                extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": True}},
                 user_id=user_id,
-                tool_for_use=None  # Let the agent decide which tools to use
+                tool_for_use=auto_fc_tools
             )
+            refinement_response = await self.llm.invoke_agent(self._agent, refinement_request)
+            curr_orch_prog.orchestration_plan = refinement_response.text
+            print(f"🔧 [ORCHESTRATE-4] Refinement agent response received: {refinement_response}", file=sys.stderr, flush=True)
 
             await self._call_platform_base(
-                session_id=session_id, 
-                step_name="Query Refinement", 
-                content="에이전트 오케스트레이션이 시작되어 사용자 질의를 이해하고 있습니다.", 
-                end_time=self._get_timestamp(), 
-                status="running", 
-                progress=0
-                )
-            
-            # Invoke agent directly with automatic function calling
-            print(f"🔧 [ORCHESTRATE-4] Invoking agent with automatic function calling...", file=sys.stderr, flush=True)
-            response = await self.llm.invoke_agent(self._agent, request)
-            print(f"🔧 [ORCHESTRATE-5] Agent response received: tools_used={response.tools_used}", file=sys.stderr, flush=True)
-
-            await self._call_platform_base(
-                session_id=session_id, 
-                step_name="Query Refinement", 
-                content="에이전트 오케스트레이션이 시작되어 사용자 질의를 이해하였습니다. 요청 수행을 위한 오케스트레이션을 시작합니다.", 
-                end_time=self._get_timestamp(), 
-                status="completed", 
-                progress=15
+                orch_progress=curr_orch_prog
                 )
             
             # Update metadata with orchestration info
-            response.metadata.update({
+            refinement_response.metadata.update({
                 "orchestration_mode": "direct_dynamic_tool",
                 "user_id": user_id,
                 "session_id": session_id,
@@ -812,7 +829,7 @@ class PrismOrchestrator:
             
             # Save conversation to memory if user_id is provided
             if user_id and self._memory_tool:
-                await self._save_conversation_to_memory(user_id, prompt, response.text)
+                await self._save_conversation_to_memory(user_id, prompt, refinement_response.text)
             
 
             # make query for monitoring agent
@@ -822,17 +839,12 @@ class PrismOrchestrator:
             이에 맞추어 모니터링 에이전트가 수행해야 할 작업을 결정해주세요.
             
             사용자 요청: {prompt}
-            수행 내역: {response.text}
+            수행 내역: {curr_orch_prog.orchestration_plan}
             """
 
 
             await self._call_platform_base(
-                session_id=session_id, 
-                step_name="Monitoring", 
-                content="오케스트레이션 에이전트가 모니터링 에이전트에게 수행해야 할 작업을 결정하고 있습니다.", 
-                end_time=self._get_timestamp(), 
-                status="running", 
-                progress=20
+                orch_progress=curr_orch_prog
             )
             # call monitoring agent
             monitoring_agent_query_request = AgentInvokeRequest(
@@ -847,25 +859,12 @@ class PrismOrchestrator:
                 tool_for_use=None
             )
             monitoring_agent_query = await self.llm.invoke_agent(self._agent, monitoring_agent_query_request)
-            await self._call_platform_base(
-                session_id=session_id, 
-                step_name="Monitoring", 
-                content="오케스트레이션 에이전트가 모니터링 에이전트에게 수행해야 할 작업을 결정했습니다.", 
-                end_time=self._get_timestamp(), 
-                status="completed", 
-                progress=30
-            )
             monitoring_agent_response = await self._call_monitoring_agent(
-                session_id=session_id,
-                request_text=monitoring_agent_query.text
+                orch_progress=curr_orch_prog
             )
+            curr_orch_prog.monitoring_agent_response = monitoring_agent_response.result
             await self._call_platform_base(
-                session_id=session_id, 
-                step_name="Monitoring", 
-                content="모니터링 에이전트가 수행한 결과를 오케스트레이션 에이전트에게 전달하고 있습니다.", 
-                end_time=self._get_timestamp(), 
-                status="completed", 
-                progress=40
+                orch_progress=curr_orch_prog
             )
             print(f"🔧 [ORCHESTRATE-6] Monitoring agent response received: {monitoring_agent_response}", file=sys.stderr, flush=True)
             
@@ -876,17 +875,9 @@ class PrismOrchestrator:
             이에 맞추어 예측 에이전트가 수행해야 할 작업을 결정해주세요.
             
             사용자 요청: {prompt}
-            수행 내역: {response.text}
-            모니터링 에이전트 수행 결과: {monitoring_agent_response}
+            수행 내역: {curr_orch_prog.orchestration_plan}
+            모니터링 에이전트 수행 결과: {curr_orch_prog.monitoring_agent_response}
             """
-            await self._call_platform_base(
-                session_id=session_id, 
-                step_name="Prediction", 
-                content="오케스트레이션 에이전트가 예측 에이전트에게 수행해야 할 작업을 결정하고 있습니다.", 
-                end_time=self._get_timestamp(), 
-                status="running", 
-                progress=50
-            )
             prediction_agent_query_request = AgentInvokeRequest(
                 prompt=prediction_agent_query,
                 max_tokens=1024,
@@ -899,19 +890,11 @@ class PrismOrchestrator:
                 tool_for_use=None
             )
             prediction_agent_query = await self.llm.invoke_agent(self._agent, prediction_agent_query_request)
+            curr_orch_prog.prediction_agent_response = prediction_agent_query.text
             await self._call_platform_base(
-                session_id=session_id, 
-                step_name="Prediction", 
-                content="오케스트레이션 에이전트가 예측 에이전트에게 수행해야 할 작업을 결정했습니다.", 
-                end_time=self._get_timestamp(), 
-                status="completed", 
-                progress=60
+                orch_progress=curr_orch_prog
             )
-            prediction_agent_response = await self._call_prediction_agent(
-                session_id=session_id,
-                request_text=prediction_agent_query.text
-            )
-            print(f"🔧 [ORCHESTRATE-7] Prediction agent response received: {prediction_agent_response}", file=sys.stderr, flush=True)
+            print(f"🔧 [ORCHESTRATE-7] Prediction agent response received: {prediction_agent_query}", file=sys.stderr, flush=True)
 
             # call autonomous control agent
             autonomous_control_agent_query = f"""
@@ -920,18 +903,10 @@ class PrismOrchestrator:
             이에 맞추어 자율제어 에이전트가 수행해야 할 작업을 결정해주세요.
             
             사용자 요청: {prompt}
-            수행 내역: {response.text}
-            모니터링 에이전트 수행 결과: {monitoring_agent_response}
-            예측 에이전트 수행 결과: {prediction_agent_response}
+            수행 내역: {curr_orch_prog.orchestration_plan}
+            모니터링 에이전트 수행 결과: {curr_orch_prog.monitoring_agent_response}
+            예측 에이전트 수행 결과: {curr_orch_prog.prediction_agent_response}
             """
-            await self._call_platform_base(
-                session_id=session_id, 
-                step_name="Autonomous Control", 
-                content="오케스트레이션 에이전트가 자율제어 에이전트에게 수행해야 할 작업을 결정하고 있습니다.", 
-                end_time=self._get_timestamp(), 
-                status="running", 
-                progress=70
-            )
             autonomous_control_agent_query_request = AgentInvokeRequest(
                 prompt=autonomous_control_agent_query,
                 max_tokens=1024,
@@ -948,13 +923,9 @@ class PrismOrchestrator:
                 session_id=session_id,
                 request_text=autonomous_control_agent_query.text
             )
+            curr_orch_prog.autonomous_control_agent_response = autonomous_control_agent_response.result
             await self._call_platform_base(
-                session_id=session_id, 
-                step_name="Autonomous Control", 
-                content="오케스트레이션 에이전트가 자율제어 에이전트에게 수행해야 할 작업을 결정했습니다.", 
-                end_time=self._get_timestamp(), 
-                status="completed", 
-                progress=80
+                orch_progress=curr_orch_prog
             )
             print(f"🔧 [ORCHESTRATE-8] Autonomous control agent response received: {autonomous_control_agent_response}", file=sys.stderr, flush=True)
             print(f"🔧 [ORCHESTRATE-9] Autonomous control agent query: {autonomous_control_agent_query}", file=sys.stderr, flush=True)
@@ -969,9 +940,9 @@ class PrismOrchestrator:
             
             **검증 대상:**
             - 사용자 요청: {prompt}
-            - 모니터링 에이전트 결과: {monitoring_agent_response}
-            - 예측 에이전트 결과: {prediction_agent_response}
-            - 자율제어 에이전트 결과: {autonomous_control_agent_response}
+            - 모니터링 에이전트 결과: {curr_orch_prog.monitoring_agent_response}
+            - 예측 에이전트 결과: {curr_orch_prog.prediction_agent_response}
+            - 자율제어 에이전트 결과: {curr_orch_prog.autonomous_control_agent_response}
             
             **검증 목적:**
             - 제안된 조치나 권장사항이 안전 규정을 준수하는지 확인
@@ -980,12 +951,7 @@ class PrismOrchestrator:
             """
             
             await self._call_platform_base(
-                session_id=session_id, 
-                step_name="Compliance Check", 
-                content="오케스트레이션 에이전트가 안전 규정 준수 여부를 검증하고 있습니다.", 
-                end_time=self._get_timestamp(), 
-                status="running", 
-                progress=85
+                orch_progress=curr_orch_prog
             )
             
             # Compliance tool을 사용하여 안전 규정 준수 여부 검증
@@ -993,7 +959,7 @@ class PrismOrchestrator:
                 tool_name="compliance_check",
                 parameters={
                     "action": f"사용자 요청: {prompt}",
-                    "context": f"모니터링 결과: {monitoring_agent_response}, 예측 결과: {prediction_agent_response}, 자율제어 결과: {autonomous_control_agent_response}",
+                    "context": f"모니터링 결과: {curr_orch_prog.monitoring_agent_response}, 예측 결과: {curr_orch_prog.prediction_agent_response}, 자율제어 결과: {curr_orch_prog.autonomous_control_agent_response}",
                     "user_id": user_id
                 }
             )
@@ -1001,9 +967,10 @@ class PrismOrchestrator:
             # Compliance tool 실행
             compliance_tool = self.tool_registry.get_tool("compliance_check")
             if compliance_tool:
-                compliance_result = await complianwce_tool.execute(compliance_request)
+                compliance_result = await compliance_tool.execute(compliance_request)
                 if compliance_result.success:
                     compliance_data = compliance_result.result
+                    curr_orch_prog.compliance_data = compliance_data
                     print(f"🔧 [ORCHESTRATE-11] Compliance check completed: {compliance_data}", file=sys.stderr, flush=True)
                 else:
                     print(f"⚠️ [ORCHESTRATE-11] Compliance check failed: {compliance_result.error_message}", file=sys.stderr, flush=True)
@@ -1013,12 +980,7 @@ class PrismOrchestrator:
                 compliance_data = {"compliance_status": "tool_not_found", "risk_level": "unknown"}
             
             await self._call_platform_base(
-                session_id=session_id, 
-                step_name="Compliance Check", 
-                content="안전 규정 준수 여부 검증이 완료되었습니다.", 
-                end_time=self._get_timestamp(), 
-                status="completed", 
-                progress=88
+                orch_progress=curr_orch_prog
             )
 
             ## finally aggregate all the results
@@ -1030,31 +992,26 @@ class PrismOrchestrator:
             이때 마크다운의 형식으로 응답을 전달해주세요.
 
             ## 사용자 요청
-            {prompt}
-            ## 수행 내역
-            {response.text}
+            {curr_orch_prog.user_request}
+            ## 오케스트레이션 계획
+            {curr_orch_prog.orchestration_plan}
             ## 모니터링 에이전트 수행 결과
-            {monitoring_agent_response}
+            {curr_orch_prog.monitoring_agent_response}
             ## 예측 에이전트 수행 결과
-            {prediction_agent_response}
+            {curr_orch_prog.prediction_agent_response}
             ## 자율제어 에이전트 수행 결과
-            {autonomous_control_agent_response}
+            {curr_orch_prog.autonomous_control_agent_response}
             ## 안전 규정 준수 검증 결과
-            {compliance_data}
+            {curr_orch_prog.compliance_data}
             """
 
             await self._call_platform_base(
-                session_id=session_id, 
-                step_name="Orchestration", 
-                content="오케스트레이션 에이전트가 최종적으로 보고서를 작성하고 있습니다.", 
-                end_time=self._get_timestamp(), 
-                status="completed", 
-                progress=90
+                orch_progress=curr_orch_prog
             )
 
             final_response_request = AgentInvokeRequest(
                 prompt=final_response,
-                max_tokens=1024,
+                max_new_tokens=4096,
                 temperature=0.7,
                 stop=None,
                 use_tools=False,
@@ -1064,30 +1021,28 @@ class PrismOrchestrator:
                 tool_for_use=None
             )
             final_response = await self.llm.invoke_agent(self._agent, final_response_request)
-            print(f"🔧 [ORCHESTRATE-12] Final response: {final_response}", file=sys.stderr, flush=True)
+            print(f"🔧 [ORCHESTRATE-12] Final response: {final_response.text}", file=sys.stderr, flush=True)
             print(f"✅ [ORCHESTRATE-13] Orchestration completed successfully", file=sys.stderr, flush=True) 
 
             # 최종 응답에 session_id 포함
             final_agent_response = AgentResponse(
                 text=final_response.text,
-                tools_used=response.tools_used,
-                tool_results=response.tool_results,
+                tools_used=[],
+                tool_results=[],
                 metadata={
-                    **response.metadata,
-                    "user_id": user_id,
-                    "session_id": session_id,
-                    "final_status": "completed",
-                    "completion_timestamp": self._get_timestamp()
+                    "orchestration_mode": "direct_dynamic_tool",
+                    "user_id": user_id if user_id else None,
+                    "session_id": session_id if session_id else None,
+                    "prompt": prompt if prompt else None,
+                    "timestamp": self._get_timestamp(),
+                    "dynamic_tools_enabled": self.orch_tool_setup.is_dynamic_tool_enabled(),
+                    "automatic_function_calling": True,
+                    "final_status": "completed"
                 }
             )
 
             await self._call_platform_base(
-                session_id=session_id, 
-                step_name="Orchestration", 
-                content="오케스트레이션이 성공적으로 완료되었습니다.", 
-                end_time=self._get_timestamp(), 
-                status="completed", 
-                progress=100
+                orch_progress=curr_orch_prog
             )
 
             return final_agent_response
