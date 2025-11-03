@@ -65,16 +65,16 @@ class OrchestrationProgress(BaseModel):
     "compliance_data": "{compliance_data}"
     }
     """
-    session_id: str = Field(..., description="작업 ID (session id)", default=None)
-    current_step: str = Field(..., description="현재 단계", default=None)
-    current_progress: int = Field(..., description="현재 진행률", default=None)
-    status: str = Field(..., description="상태", default=None)
-    user_request: str = Field(..., description="사용자 요청", default=None)
-    orchestration_plan: str = Field(..., description="오케스트레이션 계획", default=None)
-    monitoring_agent_response: str = Field(..., description="모니터링 에이전트 응답", default=None)
-    prediction_agent_response: str = Field(..., description="예측 에이전트 응답", default=None)
-    autonomous_control_agent_response: str = Field(..., description="자율제어 에이전트 응답", default=None)
-    compliance_data: str = Field(..., description="안전 규정 준수 검증 결과", default=None)
+    session_id: Optional[str] = Field(default=None, description="작업 ID (session id)")
+    current_step: Optional[str] = Field(default=None, description="현재 단계")
+    current_progress: Optional[int] = Field(default=None, description="현재 진행률")
+    status: Optional[str] = Field(default=None, description="상태")
+    user_request: Optional[str] = Field(default=None, description="사용자 요청")
+    orchestration_plan: Optional[str] = Field(default=None, description="오케스트레이션 계획")
+    monitoring_agent_response: Optional[str] = Field(default=None, description="모니터링 에이전트 응답")
+    prediction_agent_response: Optional[str] = Field(default=None, description="예측 에이전트 응답")
+    autonomous_control_agent_response: Optional[str] = Field(default=None, description="자율제어 에이전트 응답")
+    compliance_data: Optional[str] = Field(default=None, description="안전 규정 준수 검증 결과")
 
     def __repr__(self) -> str:
         return f"""
