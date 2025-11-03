@@ -146,6 +146,7 @@ class PrismOrchestrator:
         # Local cache for agent object
         print("🔧 [STEP 10] Initializing local cache and memory tool...")
         self._agent: Optional[Agent] = None
+        self._autonomous_agent: Optional[Agent] = None
         
         # Memory tool reference for direct access
         self._memory_tool = self.orch_tool_setup.get_memory_tool()
@@ -207,7 +208,6 @@ class PrismOrchestrator:
             # 자율제어 에이전트 초기화
             self._initialize_autonomous_control_agent()
             print("🔧 [STEP 13-1-6] Autonomous control agent initialized", file=sys.stderr, flush=True)
-
             print("🔧 [STEP 13-1-7] Starting platform base setup...", file=sys.stderr, flush=True)
             # 플랫폼 파이프라인 설정
             self._setup_platform_base()
@@ -218,45 +218,12 @@ class PrismOrchestrator:
         except Exception as e:
             print(f"❌ 하위 에이전트 초기화 실패: {str(e)}", file=sys.stderr, flush=True)
 
-    def _initialize_monitoring_agent(self) -> None:
-        """
-        모니터링 에이전트 초기화
-
-        .. deprecated:: 2025-09-03
-            This method was removed during refactoring (commit 7ee1d8f).
-            Use _call_monitoring_agent() instead for actual agent invocation.
-        """
-        pass
-
-    def _initialize_prediction_agent(self) -> None:
-        """
-        예측 에이전트 초기화
-
-        .. deprecated:: 2025-09-03
-            This method was removed during refactoring (commit 7ee1d8f).
-            Use _call_prediction_agent() instead for actual agent invocation.
-        """
-        pass
-
     def _initialize_autonomous_control_agent(self) -> None:
-        """
-        자율제어 에이전트 초기화
-
-        .. deprecated:: 2025-09-03
-            This method was removed during refactoring (commit 7ee1d8f).
-            Use _call_autonomous_control_agent() instead for actual agent invocation.
-        """
-        pass
-
-    def _setup_platform_base(self) -> None:
-        """
-        플랫폼 베이스 설정
-
-        .. deprecated:: 2025-09-03
-            This method was removed during refactoring (commit 7ee1d8f).
-            Platform integration is now handled through _call_platform_base().
-        """
-        pass
+        """자율제어 에이전트를 PRISM-Core 및 로컬 매니저에 등록합니다."""
+        try:
+            self.register_autonomous_control_agent()
+        except Exception as e:
+            print(f"❌ 자율제어 에이전트 초기화 실패: {str(e)}", file=sys.stderr, flush=True)
 
     # Pseudo methods for sub-agent API calls
     async def _call_monitoring_agent(self, session_id: str, request_text: str) -> MonitoringAgentResponse:
@@ -303,22 +270,63 @@ class PrismOrchestrator:
     async def _call_autonomous_control_agent(self, session_id: str, request_text: str) -> AutonomousControlAgentResponse:
         """자율제어 에이전트 호출
         사용 엔드포인트 목록
-            - /api/v1/workflow/start: 자율제어 에이전트 워크플로우 시작
-                request body:{'taskId': 'TASK_0001', 'query': str}
-                response body: {"result": str}
+            - Prism-Core /api/agents/autonomous_control_agent/invoke
         """
         try:
-            # 실제 구현에서는 HTTP 요청으로 변경
-            response = requests.post(self.autonomous_control_agent_endpoint, 
-                                    json={"taskId": session_id, "query": request_text})
-            if response.status_code == 200:
-                return AutonomousControlAgentResponse(result=response.json().get("result", "자율제어 에이전트 응답 없음"))
-            else:
-                print(f"⚠️ 자율제어 에이전트 응답 오류: {response.status_code}", file=sys.stderr, flush=True)
-                return AutonomousControlAgentResponse(result="자율제어 에이전트 응답 오류")
+            # 에이전트 준비 확인 및 필요 시 등록
+            if not self._autonomous_agent:
+                self.register_autonomous_control_agent()
+
+            composed_prompt = (
+                f"[SESSION_ID]: {session_id}\n"
+                f"[CALLER]: {self.agent_name}\n\n"
+                f"{request_text}"
+            )
+
+            invoke_request = AgentInvokeRequest(
+                prompt=composed_prompt,
+                max_tokens=1024,
+                temperature=0.7,
+                stop=None,
+                use_tools=True,
+                max_tool_calls=3,
+                extra_body={"chat_template_kwargs": {"enable_thinking": False}, "metadata": {"session_id": session_id}},
+                tool_for_use=self._autonomous_agent.tools if hasattr(self._autonomous_agent, 'tools') else None,
+            )
+            response = await self.llm.invoke_agent(self._autonomous_agent, invoke_request)
+            return AutonomousControlAgentResponse(result=response.text or "자율제어 에이전트 응답 없음")
         except Exception as e:
             print(f"❌ 자율제어 에이전트 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
-            return AutonomousControlAgentResponse(result="자율제어 에이전트 자동화 테스트 중")
+            return AutonomousControlAgentResponse(result="자율제어 에이전트 응답 오류")
+
+    def register_autonomous_control_agent(self) -> None:
+        """자율제어 에이전트를 PRISM-Core에 등록합니다."""
+        try:
+            agent = Agent(
+                name="autonomous_control_agent",
+                description="제조 공정의 제어 파라미터 최적화를 수행하는 자율제어 에이전트",
+                role_prompt=(
+                    "당신은 자율제어 에이전트입니다. 예측 결과와 현재 시스템 상태를 바탕으로 "
+                    "안전과 효율을 고려하여 최적의 제어 파라미터를 제안하세요."
+                ),
+                tools=["compliance_check", "rag_search"],
+            )
+
+            # 로컬 등록 및 캐시
+            self.agent_manager.register_agent(agent)
+            self._autonomous_agent = agent
+
+            # 원격 등록 및 도구 할당
+            if self.llm.register_agent(agent):
+                try:
+                    self.llm.assign_tools_to_agent(agent.name, agent.tools)
+                except Exception as te:
+                    print(f"⚠️ 자율제어 에이전트 도구 할당 경고: {str(te)}", file=sys.stderr, flush=True)
+                print("✅ 자율제어 에이전트 원격 등록 완료", file=sys.stderr, flush=True)
+            else:
+                print("⚠️ 자율제어 에이전트 원격 등록 실패 (로컬 등록은 완료)", file=sys.stderr, flush=True)
+        except Exception as e:
+            print(f"❌ 자율제어 에이전트 등록 실패: {str(e)}", file=sys.stderr, flush=True)
 
     async def _call_platform_base(
         self, 
@@ -940,14 +948,31 @@ class PrismOrchestrator:
 
             # call autonomous control agent
             autonomous_control_agent_query = f"""
-            현재 수행 내역을 바탕으로 자율제어 에이전트가 수행해야 할 작업을 결정해주세요.
-            특히 자율제어 에이전트는 현재 시스템들의 상태를 관찰하고 이상치, 이상치 후보, 미래 이상치 발생 가능성이 높은 지점들을 탐지할 예정입니다. 
-            이에 맞추어 자율제어 에이전트가 수행해야 할 작업을 결정해주세요.
-            
-            사용자 요청: {prompt}
-            수행 내역: {curr_orch_prog.orchestration_plan}
-            모니터링 에이전트 수행 결과: {curr_orch_prog.monitoring_agent_response}
-            예측 에이전트 수행 결과: {curr_orch_prog.prediction_agent_response}
+            아래 컨텍스트를 바탕으로 최적의 제어 파라미터를 제안하세요. 반드시 아래 JSON 스키마를 정확히 만족하는 한 개의 JSON 객체로만 응답하세요. 추가 설명이나 주석, 코드블록 마커는 금지합니다.
+
+            [컨텍스트]
+            - 사용자 요청: {prompt}
+            - 오케스트레이션 계획: {curr_orch_prog.orchestration_plan}
+            - 모니터링 결과: {curr_orch_prog.monitoring_agent_response}
+            - 예측 결과: {curr_orch_prog.prediction_agent_response}
+
+            [응답 JSON 스키마]
+            {
+              "target_system": "제어 대상 시스템명 또는 식별자",
+              "current_parameters": {"파라미터명": 값, "...": "..."},
+              "prediction_results": {
+                "horizon": "예측 구간 예: 24h/7d/30d",
+                "key_metrics": [{"name": "지표명", "value": 숫자, "unit": "단위"}]
+              },
+              "objectives": ["최적화 목표 1", "최적화 목표 2"],
+              "constraints": {
+                "safety": ["안전 제약 1", "안전 제약 2"],
+                "operational": ["운영 제약 1", "운영 제약 2"]
+              },
+              "recommended_parameters": {"권장 파라미터명": 값, "...": "..."},
+              "rationale": "추천 근거를 간결히 기술",
+              "execution_notes": "적용 시 주의사항 및 롤백 전략 등"
+            }
             """
             autonomous_control_agent_query_request = AgentInvokeRequest(
                 prompt=autonomous_control_agent_query,
