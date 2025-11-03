@@ -7,7 +7,7 @@ from .api.endpoints import orchestration
 print("🔧 [IMPORT] Orchestration imported")
 
 app = FastAPI(
-    title="PRISM-Orch",
+    title="PRISM Orchestration",
     description="자율 제조 구현을 위한 AI 에이전트 오케스트레이션 모듈",
     version="1.0"
 )
