@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = "EMPTY"
 
     # PRISM-Core API Configuration (Orch → Core 호출용)
-    PRISM_CORE_BASE_URL: str = "http://localhost:8000"
+    PRISM_CORE_BASE_URL: str = "http://prism-core-llm_agent-1:8000"
 
     # Platform API Endpoints
     PLATFORM_API_ENDPOINT: str = ""

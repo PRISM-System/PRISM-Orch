@@ -214,9 +214,50 @@ class PrismOrchestrator:
             print("🔧 [STEP 13-1-8] Platform base setup completed", file=sys.stderr, flush=True)
             
             print("✅ 하위 에이전트 초기화 완료")
-            
+
         except Exception as e:
             print(f"❌ 하위 에이전트 초기화 실패: {str(e)}", file=sys.stderr, flush=True)
+
+    def _initialize_monitoring_agent(self) -> None:
+        """
+        모니터링 에이전트 초기화
+
+        .. deprecated:: 2025-09-03
+            This method was removed during refactoring (commit 7ee1d8f).
+            Use _call_monitoring_agent() instead for actual agent invocation.
+        """
+        pass
+
+    def _initialize_prediction_agent(self) -> None:
+        """
+        예측 에이전트 초기화
+
+        .. deprecated:: 2025-09-03
+            This method was removed during refactoring (commit 7ee1d8f).
+            Use _call_prediction_agent() instead for actual agent invocation.
+        """
+        pass
+
+    def _initialize_autonomous_control_agent(self) -> None:
+        """
+        자율제어 에이전트 초기화
+
+        .. deprecated:: 2025-09-03
+            This method was removed during refactoring (commit 7ee1d8f).
+            Use _call_autonomous_control_agent() instead for actual agent invocation.
+        """
+        pass
+
+    def _setup_platform_base(self) -> None:
+        """
+        플랫폼 베이스 설정
+
+        .. deprecated:: 2025-09-03
+            This method was removed during refactoring (commit 7ee1d8f).
+            Platform integration is now handled through _call_platform_base().
+        """
+        pass
+
     # Pseudo methods for sub-agent API calls
     async def _call_monitoring_agent(self, session_id: str, request_text: str) -> MonitoringAgentResponse:
         """
@@ -307,7 +348,7 @@ class PrismOrchestrator:
         현재까지의 작업 내용을 바탕으로 현재 상태를 현장 작업자에게 요약하여 주세요.
         {orch_progress.__repr__()}
         """
-        refined_progress_msg = self.llm.invoke_agent(self._agent, AgentInvokeRequest(
+        refined_progress_msg = await self.llm.invoke_agent(self._agent, AgentInvokeRequest(
             prompt=request_msg,
             max_new_tokens=256,
             temperature=0.7,
@@ -806,7 +847,7 @@ class PrismOrchestrator:
                 max_tool_calls=max_tool_calls,
                 extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": True}},
                 user_id=user_id,
-                tool_for_use=auto_fc_tools
+                tool_for_use=[tool['name'] for tool in auto_fc_tools] if auto_fc_tools else None
             )
             refinement_response = await self.llm.invoke_agent(self._agent, refinement_request)
             curr_orch_prog.orchestration_plan = refinement_response.text
@@ -860,7 +901,8 @@ class PrismOrchestrator:
             )
             monitoring_agent_query = await self.llm.invoke_agent(self._agent, monitoring_agent_query_request)
             monitoring_agent_response = await self._call_monitoring_agent(
-                orch_progress=curr_orch_prog
+                session_id=session_id,
+                request_text=monitoring_agent_query.text
             )
             curr_orch_prog.monitoring_agent_response = monitoring_agent_response.result
             await self._call_platform_base(

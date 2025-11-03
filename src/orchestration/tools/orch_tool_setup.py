@@ -75,8 +75,6 @@ class OrchToolSetup:
                 openai_base_url=self.openai_base_url,
                 openai_api_key=self.openai_api_key,
                 model_name=settings.VLLM_MODEL,
-                encoder_model=self.encoder_model,
-                vector_dim=self.vector_dim,
                 client_id=self.client_id,
                 class_prefix=self.class_prefix
             )
@@ -90,8 +88,7 @@ class OrchToolSetup:
                 openai_base_url=self.openai_base_url,
                 openai_api_key=self.openai_api_key,
                 model_name=settings.VLLM_MODEL,
-                encoder_model=self.encoder_model,
-                vector_dim=self.vector_dim,
+                embedder_model_name=self.encoder_model,
                 client_id=self.client_id,
                 class_prefix=self.class_prefix
             )
