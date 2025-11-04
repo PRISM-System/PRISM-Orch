@@ -1140,11 +1140,15 @@ class PrismOrchestrator:
                 tool_for_use=None
             )
             prediction_agent_query = await self.llm.invoke_agent(self._agent, prediction_agent_query_request)
-            curr_orch_prog.prediction_agent_response = prediction_agent_query.text
+            prediction_agent_response = await self._call_prediction_agent(
+                session_id=session_id,
+                request_text=prediction_agent_query.text
+            )
+            curr_orch_prog.prediction_agent_response = prediction_agent_response.result
             await self._call_platform_base(
                 orch_progress=curr_orch_prog
             )
-            print(f"🔧 [ORCHESTRATE-7] Prediction agent response received: {prediction_agent_query}", file=sys.stderr, flush=True)
+            print(f"🔧 [ORCHESTRATE-7] Prediction agent response received: {prediction_agent_response}", file=sys.stderr, flush=True)
 
             # call autonomous control agent
             autonomous_control_agent_query = f"""
