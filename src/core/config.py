@@ -26,10 +26,12 @@ class Settings(BaseSettings):
     # PRISM-Core API Configuration (Orch → Core 호출용)
     PRISM_CORE_BASE_URL: str = "http://prism-core-llm_agent-1:8000"
 
-    # Platform API Endpoints
-    PLATFORM_API_ENDPOINT: str = ""
+    # Platform API Configuration
+    PLATFORM_BASE_URL: str = ""
     PLATFORM_ID: str = ""
     PLATFORM_PW: str = ""
+
+    # Agent API Endpoints
     MONITORING_API_ENDPOINT: str = ""
     PREDICTION_API_ENDPOINT: str = ""
     AUTOCONTROL_API_ENDPOINT: str = ""

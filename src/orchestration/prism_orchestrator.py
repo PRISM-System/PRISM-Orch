@@ -72,22 +72,23 @@ class PrismOrchestrator:
             settings.AUTOCONTROL_API_ENDPOINT or 
             "http://localhost:8004/api/autonomous_control"
         )
-        self.platform_api_base = (
+        self.platform_base_url = (
             platform_api_base or
-            settings.PLATFORM_API_ENDPOINT or
-            "http://localhost:8005/api/platform"
-        )
+            settings.PLATFORM_BASE_URL or
+            "http://localhost:8005/django/agi"
+        ).rstrip('/')
         self.platform_id = settings.PLATFORM_ID
         self.platform_pw = settings.PLATFORM_PW
         self.platform_session = None  # 로그인 후 requests.Session 객체 저장
 
         print(f"🔧 [STEP 3] Endpoints resolved:", file=sys.stderr, flush=True)
+        print(f"   - Platform Credentials: ID={self.platform_id}, PW={'****' if self.platform_pw else '(empty)'}", file=sys.stderr, flush=True)
         print(f"   - Core API: {core_api}", file=sys.stderr, flush=True)
         print(f"   - vLLM API: {base_url}", file=sys.stderr, flush=True)
         print(f"   - Monitoring Agent: {self.monitoring_agent_endpoint}", file=sys.stderr, flush=True)
         print(f"   - Prediction Agent: {self.prediction_agent_endpoint}", file=sys.stderr, flush=True)
         print(f"   - Autonomous Control Agent: {self.autonomous_control_agent_endpoint}", file=sys.stderr, flush=True)
-        print(f"   - Platform API: {self.platform_api_base}", file=sys.stderr, flush=True)
+        print(f"   - Platform Base URL: {self.platform_base_url}", file=sys.stderr, flush=True)
 
         # Initialize managers
         print("🔧 [STEP 4] Initializing managers...", file=sys.stderr, flush=True)
@@ -214,10 +215,12 @@ class PrismOrchestrator:
             # # 자율제어 에이전트 초기화
             # self._initialize_autonomous_control_agent()
             # print("🔧 [STEP 13-1-6] Autonomous control agent initialized", file=sys.stderr, flush=True)
-            print("🔧 [STEP 13-1-7] Starting platform base setup...", file=sys.stderr, flush=True)
-            # 플랫폼 파이프라인 설정
-            self._setup_platform_base()
-            print("🔧 [STEP 13-1-8] Platform base setup completed", file=sys.stderr, flush=True)
+            print("🔧 [STEP 13-1-7] Starting platform login...", file=sys.stderr, flush=True)
+            # 플랫폼 로그인
+            if self._login_to_platform():
+                print("🔧 [STEP 13-1-8] Platform login completed", file=sys.stderr, flush=True)
+            else:
+                print("⚠️ [STEP 13-1-8] Platform login skipped (credentials not configured)", file=sys.stderr, flush=True)
             
             print("✅ 하위 에이전트 초기화 완료")
 
@@ -441,19 +444,15 @@ class PrismOrchestrator:
             # 새로운 세션 생성
             session = requests.Session()
 
-            # 로그인 엔드포인트: /django/agi/api/login/
-            base_url = self.platform_api_base.rstrip('/')
-            # /django/agi/ 에서 api/login/ 추가
-            if base_url.endswith('/django/agi'):
-                login_url = f"{base_url}/api/login/"
-            else:
-                login_url = f"{base_url}/api/login/"
+            # 로그인 엔드포인트: {platform_base_url}/api/login/
+            login_url = f"{self.platform_base_url}/api/login/"
 
             login_payload = {
                 "username": self.platform_id,
                 "password": self.platform_pw
             }
 
+            print(f"🔐 Platform 로그인 시도: {login_url}", file=sys.stderr, flush=True)
             response = session.post(login_url, json=login_payload, timeout=10)
             response.raise_for_status()
 
@@ -514,6 +513,9 @@ class PrismOrchestrator:
             extra_body = {"chat_template_kwargs": {"enable_thinking": False}},
         ))
 
+        # WebSocket 업데이트 엔드포인트: {platform_base_url}/api/websocket/orchestrate/update/
+        websocket_update_url = f"{self.platform_base_url}/api/websocket/orchestrate/update/"
+
         payload = {
             "session_id": orch_progress.session_id,
             "step_name": orch_progress.current_step,
@@ -524,9 +526,11 @@ class PrismOrchestrator:
         }
         try:
             # 로그인한 세션을 사용하여 요청 (쿠키 자동 포함)
-            resp = self.platform_session.post(self.platform_api_base, headers=headers, json=payload, timeout=10)
+            print(f"📡 Platform WebSocket 업데이트: {websocket_update_url}", file=sys.stderr, flush=True)
+            resp = self.platform_session.post(websocket_update_url, headers=headers, json=payload, timeout=10)
             resp.raise_for_status()  # HTTP 오류 발생 시 예외
             response = resp.json()       # 서버에서 JSON 응답 반환 시
+            print(f"✅ Platform 업데이트 성공: {response}", file=sys.stderr, flush=True)
             return PlatformBaseResponse(status="success", message=f"WebSocket update sent: {response}")
         except Exception as e:
             print(f"❌ 플랫폼 기반 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
