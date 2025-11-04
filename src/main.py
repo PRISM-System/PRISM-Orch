@@ -5,11 +5,28 @@ from .core.config import settings
 print("🔧 [IMPORT] Settings imported")
 from .api.endpoints import orchestration
 print("🔧 [IMPORT] Orchestration imported")
+from .orchestration.prism_orchestrator import PrismOrchestrator
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """애플리케이션 시작 시 Orchestrator를 초기화하고, 종료 시 정리합니다."""
+    print("🚀 [STARTUP] Initializing Orchestrator at application startup...")
+    try:
+        orchestration.orchestrator = PrismOrchestrator()
+        print("✅ [STARTUP] Orchestrator initialized successfully")
+    except Exception as e:
+        print(f"❌ [STARTUP] Failed to initialize orchestrator: {str(e)}")
+        raise
+
+    yield
+
+    print("🛑 [SHUTDOWN] Cleaning up resources...")
 
 app = FastAPI(
     title="PRISM Orchestration",
     description="자율 제조 구현을 위한 AI 에이전트 오케스트레이션 모듈",
-    version="1.0"
+    version="1.0",
+    lifespan=lifespan
 )
 
 # Routers

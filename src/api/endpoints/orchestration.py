@@ -30,19 +30,12 @@ async def run_orchestration(
     print("🚀 [API] ============= POST REQUEST RECEIVED =============", file=sys.stderr)
     print("🚀 [API] POST request received in run_orchestration", file=sys.stderr)
     global orchestrator
-    
-    print("🚀 [API] Checking orchestrator state...", file=sys.stderr)
-    # Lazy initialization of orchestrator
+
+    # Orchestrator가 애플리케이션 시작 시 초기화되었는지 확인
     if orchestrator is None:
-        print("🚀 [API] Orchestrator is None, starting initialization...", file=sys.stderr)
-        try:
-            print("🔧 Initializing orchestrator...", file=sys.stderr, flush=True)
-            orchestrator = PrismOrchestrator()
-            print("✅ Orchestrator initialized successfully", file=sys.stderr, flush=True)
-        except Exception as e:
-            print(f"❌ Orchestrator initialization failed: {str(e)}", file=sys.stderr, flush=True)
-            raise HTTPException(status_code=500, detail=f"Orchestrator initialization failed: {str(e)}")
-    
+        print("❌ [API] Orchestrator not initialized at startup", file=sys.stderr)
+        raise HTTPException(status_code=500, detail="Orchestrator not initialized. Please restart the application.")
+
     session_id = query.session_id or f"session_{uuid.uuid4()}"
 
     # Invoke high-level orchestrator (includes LLM-based decomposition, tool calls, RAG + compliance)

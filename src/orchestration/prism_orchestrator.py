@@ -250,102 +250,149 @@ class PrismOrchestrator:
 
     # Pseudo methods for sub-agent API calls
     async def _call_monitoring_agent(self, session_id: str, request_text: str) -> MonitoringAgentResponse:
-        """모니터링 에이전트 호출
-        사용 엔드포인트 목록
-            - Prism-Core /api/agents/monitoring_agent/invoke
+        """모니터링 에이전트 직접 호출
+        사용 엔드포인트:
+            - POST {monitoring_agent_endpoint}/api/v1/workflow/start
         """
         try:
-            # 에이전트 준비 확인 및 필요 시 등록
-            if not self._monitoring_agent:
-                self.register_monitoring_agent()
+            import asyncio
 
-            composed_prompt = (
-                f"[SESSION_ID]: {session_id}\n"
-                f"[CALLER]: {self.agent_name}\n\n"
-                f"{request_text}"
-            )
+            # 모니터링 에이전트 API 요청 페이로드
+            payload = {
+                "taskId": session_id,
+                "query": request_text
+            }
 
-            invoke_request = AgentInvokeRequest(
-                prompt=composed_prompt,
-                max_tokens=1024,
-                temperature=0.7,
-                stop=None,
-                use_tools=True,
-                max_tool_calls=3,
-                extra_body={"chat_template_kwargs": {"enable_thinking": False}, "metadata": {"session_id": session_id}},
-                tool_for_use=self._monitoring_agent.tools if hasattr(self._monitoring_agent, 'tools') else None,
-            )
-            response = await self.llm.invoke_agent(self._monitoring_agent, invoke_request)
-            return MonitoringAgentResponse(result=response.text or "모니터링 에이전트 응답 없음")
+            print(f"📡 모니터링 에이전트 호출: {self.monitoring_agent_endpoint}", file=sys.stderr, flush=True)
+
+            # 비동기 HTTP 요청 (requests는 동기이므로 asyncio.to_thread 사용)
+            def _sync_request():
+                response = requests.post(
+                    f"{self.monitoring_agent_endpoint}",
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                    timeout=120
+                )
+                response.raise_for_status()
+                return response.json()
+
+            result = await asyncio.to_thread(_sync_request)
+
+            # WorkflowStartResponse 스키마: {summary, monitored_timeseries, result}
+            response_text = result.get("result", "") or result.get("summary", "") or "모니터링 에이전트 응답 없음"
+
+            print(f"✅ 모니터링 에이전트 응답 받음", file=sys.stderr, flush=True)
+            return MonitoringAgentResponse(result=response_text)
+
         except Exception as e:
             print(f"❌ 모니터링 에이전트 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
-            return MonitoringAgentResponse(result="모니터링 에이전트 응답 오류")
+            import traceback
+            traceback.print_exc()
+            return MonitoringAgentResponse(result=f"모니터링 에이전트 응답 오류: {str(e)}")
     
     
 
     async def _call_prediction_agent(self, session_id: str, request_text: str) -> PredictionAgentResponse:
-        """예측 에이전트 호출
-        사용 엔드포인트 목록
-            - Prism-Core /api/agents/prediction_agent/invoke
+        """예측 에이전트 직접 호출
+        사용 엔드포인트:
+            - POST {prediction_agent_endpoint}/api/v1/prediction/run-direct
         """
         try:
-            # 에이전트 준비 확인 및 필요 시 등록
-            if not self._prediction_agent:
-                self.register_prediction_agent()
+            import asyncio
 
-            composed_prompt = (
-                f"[SESSION_ID]: {session_id}\n"
-                f"[CALLER]: {self.agent_name}\n\n"
-                f"{request_text}"
-            )
+            # 예측 에이전트 API 요청 페이로드
+            payload = {
+                "taskId": session_id,
+                "query": request_text
+            }
 
-            invoke_request = AgentInvokeRequest(
-                prompt=composed_prompt,
-                max_tokens=1024,
-                temperature=0.7,
-                stop=None,
-                use_tools=True,
-                max_tool_calls=3,
-                extra_body={"chat_template_kwargs": {"enable_thinking": False}, "metadata": {"session_id": session_id}},
-                tool_for_use=self._prediction_agent.tools if hasattr(self._prediction_agent, 'tools') else None,
-            )
-            response = await self.llm.invoke_agent(self._prediction_agent, invoke_request)
-            return PredictionAgentResponse(result=response.text or "예측 에이전트 응답 없음")
+            print(f"📡 예측 에이전트 호출: {self.prediction_agent_endpoint}", file=sys.stderr, flush=True)
+
+            # 비동기 HTTP 요청
+            def _sync_request():
+                response = requests.post(
+                    f"{self.prediction_agent_endpoint}",
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                    timeout=180  # 예측은 시간이 오래 걸릴 수 있음
+                )
+                response.raise_for_status()
+                return response.json()
+
+            result = await asyncio.to_thread(_sync_request)
+
+            # DirectRunResponse 스키마: {code, data: {result, raw}, metadata}
+            if result.get("code") == "SUCCESS":
+                response_text = result.get("data", {}).get("result", "") or "예측 에이전트 응답 없음"
+            else:
+                response_text = f"예측 실패: {result.get('data', {})}"
+
+            print(f"✅ 예측 에이전트 응답 받음", file=sys.stderr, flush=True)
+            return PredictionAgentResponse(result=response_text)
+
         except Exception as e:
             print(f"❌ 예측 에이전트 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
-            return PredictionAgentResponse(result="예측 에이전트 응답 오류")
+            import traceback
+            traceback.print_exc()
+            return PredictionAgentResponse(result=f"예측 에이전트 응답 오류: {str(e)}")
 
     async def _call_autonomous_control_agent(self, session_id: str, request_text: str) -> AutonomousControlAgentResponse:
-        """자율제어 에이전트 호출
-        사용 엔드포인트 목록
-            - Prism-Core /api/agents/autonomous_control_agent/invoke
+        """자율제어 에이전트 직접 호출
+        사용 엔드포인트:
+            - PUT {autonomous_control_agent_endpoint} (with {task_id} replaced)
         """
         try:
-            # 에이전트 준비 확인 및 필요 시 등록
-            if not self._autonomous_agent:
-                self.register_autonomous_control_agent()
+            import asyncio
 
-            composed_prompt = (
-                f"[SESSION_ID]: {session_id}\n"
-                f"[CALLER]: {self.agent_name}\n\n"
-                f"{request_text}"
-            )
+            # 자율제어 에이전트 API 요청 페이로드
+            # OrchestrationAssignRequest 스키마에 맞춤
+            payload = {
+                "taskId": session_id,
+                "query": request_text,
+                "feature_names": ["PRESSURE", "TEMPERATURE"],  # 기본값 (실제로는 모니터링/예측 결과에서 추출)
+                "target_col": "PRESSURE",  # 기본값
+                "control_setpoint": 100.0,  # 기본값
+                "control_horizon_minutes": 60,  # 기본값
+                "constraints": None,
+                "optimization_objective": "minimize_deviation",  # 기본값
+                "safety_mode": True,
+                "simulation_before_apply": True,
+                "timeseries_info": {
+                    "source_variables": ["PRESSURE", "TEMPERATURE"],  # 기본값
+                    "target_variable": "PRESSURE"  # 기본값
+                }
+            }
 
-            invoke_request = AgentInvokeRequest(
-                prompt=composed_prompt,
-                max_tokens=1024,
-                temperature=0.7,
-                stop=None,
-                use_tools=True,
-                max_tool_calls=3,
-                extra_body={"chat_template_kwargs": {"enable_thinking": False}, "metadata": {"session_id": session_id}},
-                tool_for_use=self._autonomous_agent.tools if hasattr(self._autonomous_agent, 'tools') else None,
-            )
-            response = await self.llm.invoke_agent(self._autonomous_agent, invoke_request)
-            return AutonomousControlAgentResponse(result=response.text or "자율제어 에이전트 응답 없음")
+            # 엔드포인트 URL에서 {task_id} 치환
+            endpoint_url = self.autonomous_control_agent_endpoint.replace("{task_id}", session_id)
+
+            print(f"📡 자율제어 에이전트 호출: {endpoint_url}", file=sys.stderr, flush=True)
+
+            # 비동기 HTTP 요청 (PUT 메서드 사용)
+            def _sync_request():
+                response = requests.put(
+                    endpoint_url,
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                    timeout=180  # 제어 시뮬레이션은 시간이 오래 걸릴 수 있음
+                )
+                response.raise_for_status()
+                return response.json()
+
+            result = await asyncio.to_thread(_sync_request)
+
+            # OrchestrationAssignResponse 스키마: {task_id, updated_assignments, response}
+            response_data = result.get("response", {}).get("autocontrol", {})
+            response_text = response_data.get("result", "") or response_data.get("summary", "") or "자율제어 에이전트 응답 없음"
+
+            print(f"✅ 자율제어 에이전트 응답 받음", file=sys.stderr, flush=True)
+            return AutonomousControlAgentResponse(result=response_text)
+
         except Exception as e:
             print(f"❌ 자율제어 에이전트 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
-            return AutonomousControlAgentResponse(result="자율제어 에이전트 응답 오류")
+            import traceback
+            traceback.print_exc()
+            return AutonomousControlAgentResponse(result=f"자율제어 에이전트 응답 오류: {str(e)}")
 
     def register_monitoring_agent(self) -> None:
         """모니터링 에이전트를 PRISM-Core에 등록합니다."""
