@@ -73,11 +73,14 @@ class PrismOrchestrator:
             "http://localhost:8004/api/autonomous_control"
         )
         self.platform_api_base = (
-            platform_api_base or 
-            settings.PLATFORM_API_ENDPOINT or 
+            platform_api_base or
+            settings.PLATFORM_API_ENDPOINT or
             "http://localhost:8005/api/platform"
         )
-        
+        self.platform_id = settings.PLATFORM_ID
+        self.platform_pw = settings.PLATFORM_PW
+        self.platform_session = None  # 로그인 후 requests.Session 객체 저장
+
         print(f"🔧 [STEP 3] Endpoints resolved:", file=sys.stderr, flush=True)
         print(f"   - Core API: {core_api}", file=sys.stderr, flush=True)
         print(f"   - vLLM API: {base_url}", file=sys.stderr, flush=True)
@@ -146,6 +149,8 @@ class PrismOrchestrator:
         # Local cache for agent object
         print("🔧 [STEP 10] Initializing local cache and memory tool...")
         self._agent: Optional[Agent] = None
+        self._monitoring_agent: Optional[Agent] = None
+        self._prediction_agent: Optional[Agent] = None
         self._autonomous_agent: Optional[Agent] = None
         
         # Memory tool reference for direct access
@@ -194,20 +199,21 @@ class PrismOrchestrator:
         """3가지 하위 에이전트를 초기화합니다."""
         import sys
         try:
-            print("🔧 [STEP 13-1-1] Initializing monitoring agent...", file=sys.stderr, flush=True)
-            # 모니터링 에이전트 초기화
-            self._initialize_monitoring_agent()
-            print("🔧 [STEP 13-1-2] Monitoring agent initialized", file=sys.stderr, flush=True)
-            
-            print("🔧 [STEP 13-1-3] Initializing prediction agent...", file=sys.stderr, flush=True)
-            # 예측 에이전트 초기화
-            self._initialize_prediction_agent()
-            print("🔧 [STEP 13-1-4] Prediction agent initialized", file=sys.stderr, flush=True)
-            
-            print("🔧 [STEP 13-1-5] Initializing autonomous control agent...", file=sys.stderr, flush=True)
-            # 자율제어 에이전트 초기화
-            self._initialize_autonomous_control_agent()
-            print("🔧 [STEP 13-1-6] Autonomous control agent initialized", file=sys.stderr, flush=True)
+            # 각 서비스가 자체적으로 에이전트를 등록하므로 Orch에서는 초기화하지 않음
+            # print("🔧 [STEP 13-1-1] Initializing monitoring agent...", file=sys.stderr, flush=True)
+            # # 모니터링 에이전트 초기화
+            # self._initialize_monitoring_agent()
+            # print("🔧 [STEP 13-1-2] Monitoring agent initialized", file=sys.stderr, flush=True)
+            #
+            # print("🔧 [STEP 13-1-3] Initializing prediction agent...", file=sys.stderr, flush=True)
+            # # 예측 에이전트 초기화
+            # self._initialize_prediction_agent()
+            # print("🔧 [STEP 13-1-4] Prediction agent initialized", file=sys.stderr, flush=True)
+            #
+            # print("🔧 [STEP 13-1-5] Initializing autonomous control agent...", file=sys.stderr, flush=True)
+            # # 자율제어 에이전트 초기화
+            # self._initialize_autonomous_control_agent()
+            # print("🔧 [STEP 13-1-6] Autonomous control agent initialized", file=sys.stderr, flush=True)
             print("🔧 [STEP 13-1-7] Starting platform base setup...", file=sys.stderr, flush=True)
             # 플랫폼 파이프라인 설정
             self._setup_platform_base()
@@ -218,6 +224,20 @@ class PrismOrchestrator:
         except Exception as e:
             print(f"❌ 하위 에이전트 초기화 실패: {str(e)}", file=sys.stderr, flush=True)
 
+    def _initialize_monitoring_agent(self) -> None:
+        """모니터링 에이전트를 PRISM-Core 및 로컬 매니저에 등록합니다."""
+        try:
+            self.register_monitoring_agent()
+        except Exception as e:
+            print(f"❌ 모니터링 에이전트 초기화 실패: {str(e)}", file=sys.stderr, flush=True)
+
+    def _initialize_prediction_agent(self) -> None:
+        """예측 에이전트를 PRISM-Core 및 로컬 매니저에 등록합니다."""
+        try:
+            self.register_prediction_agent()
+        except Exception as e:
+            print(f"❌ 예측 에이전트 초기화 실패: {str(e)}", file=sys.stderr, flush=True)
+
     def _initialize_autonomous_control_agent(self) -> None:
         """자율제어 에이전트를 PRISM-Core 및 로컬 매니저에 등록합니다."""
         try:
@@ -227,45 +247,70 @@ class PrismOrchestrator:
 
     # Pseudo methods for sub-agent API calls
     async def _call_monitoring_agent(self, session_id: str, request_text: str) -> MonitoringAgentResponse:
-        """
-        모니터링 에이전트 호출
+        """모니터링 에이전트 호출
         사용 엔드포인트 목록
-            - /api/v1/workflow/start: 모니터링 에이전트 워크플로우 시작
-                request body:{'taskId': 'TASK_0001', 'query': str}
-                response body: {"result": str}
+            - Prism-Core /api/agents/monitoring_agent/invoke
         """
         try:
-            response = requests.post(self.monitoring_agent_endpoint, 
-                                        json={"taskId": session_id, "query": request_text})
-            if response.status_code == 200:
-                return MonitoringAgentResponse(result=response.json().get("result", "모니터링 에이전트 응답 없음"))
-            else:
-                print(f"⚠️ 모니터링 에이전트 응답 오류: {response.status_code}", file=sys.stderr, flush=True)
-                return MonitoringAgentResponse(result="모니터링 에이전트 응답 오류")
+            # 에이전트 준비 확인 및 필요 시 등록
+            if not self._monitoring_agent:
+                self.register_monitoring_agent()
+
+            composed_prompt = (
+                f"[SESSION_ID]: {session_id}\n"
+                f"[CALLER]: {self.agent_name}\n\n"
+                f"{request_text}"
+            )
+
+            invoke_request = AgentInvokeRequest(
+                prompt=composed_prompt,
+                max_tokens=1024,
+                temperature=0.7,
+                stop=None,
+                use_tools=True,
+                max_tool_calls=3,
+                extra_body={"chat_template_kwargs": {"enable_thinking": False}, "metadata": {"session_id": session_id}},
+                tool_for_use=self._monitoring_agent.tools if hasattr(self._monitoring_agent, 'tools') else None,
+            )
+            response = await self.llm.invoke_agent(self._monitoring_agent, invoke_request)
+            return MonitoringAgentResponse(result=response.text or "모니터링 에이전트 응답 없음")
         except Exception as e:
             print(f"❌ 모니터링 에이전트 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
-            return MonitoringAgentResponse(result="모니터링 에이전트 자동화 테스트 중")
+            return MonitoringAgentResponse(result="모니터링 에이전트 응답 오류")
     
     
 
     async def _call_prediction_agent(self, session_id: str, request_text: str) -> PredictionAgentResponse:
         """예측 에이전트 호출
         사용 엔드포인트 목록
-            - /api/v1/workflow/start: 예측 에이전트 워크플로우 시작
-                {"query": "CMP 센서의 MOTOR_CURRENT를 2025-08-20 09:00:00~09:10:00 예측해줘"}
+            - Prism-Core /api/agents/prediction_agent/invoke
         """
         try:
-            # 실제 구현에서는 HTTP 요청으로 변경
-            response = requests.post(self.prediction_agent_endpoint, 
-                                    json={"query": request_text})
-            if response.status_code == 200:
-                return PredictionAgentResponse(result=response.json().get("result", "예측 에이전트 응답 없음"))
-            else:
-                print(f"⚠️ 예측 에이전트 응답 오류: {response.status_code}", file=sys.stderr, flush=True)
-                return PredictionAgentResponse(result="예측 에이전트 응답 오류")
+            # 에이전트 준비 확인 및 필요 시 등록
+            if not self._prediction_agent:
+                self.register_prediction_agent()
+
+            composed_prompt = (
+                f"[SESSION_ID]: {session_id}\n"
+                f"[CALLER]: {self.agent_name}\n\n"
+                f"{request_text}"
+            )
+
+            invoke_request = AgentInvokeRequest(
+                prompt=composed_prompt,
+                max_tokens=1024,
+                temperature=0.7,
+                stop=None,
+                use_tools=True,
+                max_tool_calls=3,
+                extra_body={"chat_template_kwargs": {"enable_thinking": False}, "metadata": {"session_id": session_id}},
+                tool_for_use=self._prediction_agent.tools if hasattr(self._prediction_agent, 'tools') else None,
+            )
+            response = await self.llm.invoke_agent(self._prediction_agent, invoke_request)
+            return PredictionAgentResponse(result=response.text or "예측 에이전트 응답 없음")
         except Exception as e:
             print(f"❌ 예측 에이전트 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
-            return PredictionAgentResponse(result="예측 에이전트 자동화 테스트 중")
+            return PredictionAgentResponse(result="예측 에이전트 응답 오류")
 
     async def _call_autonomous_control_agent(self, session_id: str, request_text: str) -> AutonomousControlAgentResponse:
         """자율제어 에이전트 호출
@@ -299,6 +344,64 @@ class PrismOrchestrator:
             print(f"❌ 자율제어 에이전트 호출 중 오류가 발생했습니다: {str(e)}", file=sys.stderr, flush=True)
             return AutonomousControlAgentResponse(result="자율제어 에이전트 응답 오류")
 
+    def register_monitoring_agent(self) -> None:
+        """모니터링 에이전트를 PRISM-Core에 등록합니다."""
+        try:
+            agent = Agent(
+                name="monitoring_agent",
+                description="제조 공정의 현재 상태를 모니터링하고 이상치를 탐지하는 모니터링 에이전트",
+                role_prompt=(
+                    "당신은 모니터링 에이전트입니다. 센서 데이터를 분석하여 현재 시스템 상태를 파악하고 "
+                    "이상치 여부를 탐지하며, 미래 이상치 발생 가능성이 높은 부분을 알려주세요."
+                ),
+                tools=["compliance_check", "rag_search"],
+            )
+
+            # 로컬 등록 및 캐시
+            self.agent_manager.register_agent(agent)
+            self._monitoring_agent = agent
+
+            # 원격 등록 및 도구 할당
+            if self.llm.register_agent(agent):
+                try:
+                    self.llm.assign_tools_to_agent(agent.name, agent.tools)
+                except Exception as te:
+                    print(f"⚠️ 모니터링 에이전트 도구 할당 경고: {str(te)}", file=sys.stderr, flush=True)
+                print("✅ 모니터링 에이전트 원격 등록 완료", file=sys.stderr, flush=True)
+            else:
+                print("⚠️ 모니터링 에이전트 원격 등록 실패 (로컬 등록은 완료)", file=sys.stderr, flush=True)
+        except Exception as e:
+            print(f"❌ 모니터링 에이전트 등록 실패: {str(e)}", file=sys.stderr, flush=True)
+
+    def register_prediction_agent(self) -> None:
+        """예측 에이전트를 PRISM-Core에 등록합니다."""
+        try:
+            agent = Agent(
+                name="prediction_agent",
+                description="제조 공정의 미래 변화를 예측하고 이상치 발생 가능성을 분석하는 예측 에이전트",
+                role_prompt=(
+                    "당신은 예측 에이전트입니다. 과거 데이터를 바탕으로 센서 값의 미래 변화를 예측하고 "
+                    "이상치 발생 가능성이 높은 부분을 알려주세요."
+                ),
+                tools=["compliance_check", "rag_search"],
+            )
+
+            # 로컬 등록 및 캐시
+            self.agent_manager.register_agent(agent)
+            self._prediction_agent = agent
+
+            # 원격 등록 및 도구 할당
+            if self.llm.register_agent(agent):
+                try:
+                    self.llm.assign_tools_to_agent(agent.name, agent.tools)
+                except Exception as te:
+                    print(f"⚠️ 예측 에이전트 도구 할당 경고: {str(te)}", file=sys.stderr, flush=True)
+                print("✅ 예측 에이전트 원격 등록 완료", file=sys.stderr, flush=True)
+            else:
+                print("⚠️ 예측 에이전트 원격 등록 실패 (로컬 등록은 완료)", file=sys.stderr, flush=True)
+        except Exception as e:
+            print(f"❌ 예측 에이전트 등록 실패: {str(e)}", file=sys.stderr, flush=True)
+
     def register_autonomous_control_agent(self) -> None:
         """자율제어 에이전트를 PRISM-Core에 등록합니다."""
         try:
@@ -328,8 +431,47 @@ class PrismOrchestrator:
         except Exception as e:
             print(f"❌ 자율제어 에이전트 등록 실패: {str(e)}", file=sys.stderr, flush=True)
 
+    def _login_to_platform(self) -> bool:
+        """플랫폼에 로그인하여 세션을 생성합니다."""
+        if not self.platform_id or not self.platform_pw:
+            print("⚠️ Platform 인증 정보가 설정되지 않았습니다.", file=sys.stderr, flush=True)
+            return False
+
+        try:
+            # 새로운 세션 생성
+            session = requests.Session()
+
+            # 로그인 엔드포인트: /django/agi/api/login/
+            base_url = self.platform_api_base.rstrip('/')
+            # /django/agi/ 에서 api/login/ 추가
+            if base_url.endswith('/django/agi'):
+                login_url = f"{base_url}/api/login/"
+            else:
+                login_url = f"{base_url}/api/login/"
+
+            login_payload = {
+                "username": self.platform_id,
+                "password": self.platform_pw
+            }
+
+            response = session.post(login_url, json=login_payload, timeout=10)
+            response.raise_for_status()
+
+            result = response.json()
+
+            if result.get("success"):
+                self.platform_session = session  # 세션 저장 (쿠키 포함)
+                print(f"✅ Platform 로그인 성공 (user: {result.get('username')})", file=sys.stderr, flush=True)
+                return True
+            else:
+                print(f"⚠️ Platform 로그인 실패: {result}", file=sys.stderr, flush=True)
+                return False
+        except Exception as e:
+            print(f"❌ Platform 로그인 실패: {str(e)}", file=sys.stderr, flush=True)
+            return False
+
     async def _call_platform_base(
-        self, 
+        self,
         orch_progress: OrchestrationProgress,
         ) -> PlatformBaseResponse:
         """플랫폼 기반 호출
@@ -345,10 +487,16 @@ class PrismOrchestrator:
                     }
         """
 
+        # 플랫폼 로그인 (세션이 없으면 로그인 시도)
+        if not self.platform_session:
+            login_success = self._login_to_platform()
+            if not login_success:
+                return PlatformBaseResponse(status="error", message="Platform login failed")
+
         headers = {
-        "accept": "application/json",
-        "Content-Type": "application/json",
-        "X-CSRFTOKEN": "91p6AK0OsryzHNAQqOaTnxKtDeS3uE53"
+            "accept": "application/json",
+            "Content-Type": "application/json",
+            "X-CSRFTOKEN": "91p6AK0OsryzHNAQqOaTnxKtDeS3uE53"
         }
 
         # refine content to user-friendly format
@@ -367,15 +515,16 @@ class PrismOrchestrator:
         ))
 
         payload = {
-        "session_id": orch_progress.session_id,
-        "step_name": orch_progress.current_step,
-        "content": refined_progress_msg.text,
-        "end_time": self._get_timestamp(),
-        "status": "running",
-        "progress": orch_progress.current_progress
+            "session_id": orch_progress.session_id,
+            "step_name": orch_progress.current_step,
+            "content": refined_progress_msg.text,
+            "end_time": self._get_timestamp(),
+            "status": "running",
+            "progress": orch_progress.current_progress
         }
         try:
-            resp = requests.post(self.platform_api_base, headers=headers, json=payload, timeout=10)
+            # 로그인한 세션을 사용하여 요청 (쿠키 자동 포함)
+            resp = self.platform_session.post(self.platform_api_base, headers=headers, json=payload, timeout=10)
             resp.raise_for_status()  # HTTP 오류 발생 시 예외
             response = resp.json()       # 서버에서 JSON 응답 반환 시
             return PlatformBaseResponse(status="success", message=f"WebSocket update sent: {response}")
@@ -957,22 +1106,22 @@ class PrismOrchestrator:
             - 예측 결과: {curr_orch_prog.prediction_agent_response}
 
             [응답 JSON 스키마]
-            {
+            {{
               "target_system": "제어 대상 시스템명 또는 식별자",
-              "current_parameters": {"파라미터명": 값, "...": "..."},
-              "prediction_results": {
+              "current_parameters": {{"파라미터명": 값, "...": "..."}},
+              "prediction_results": {{
                 "horizon": "예측 구간 예: 24h/7d/30d",
-                "key_metrics": [{"name": "지표명", "value": 숫자, "unit": "단위"}]
-              },
+                "key_metrics": [{{"name": "지표명", "value": 숫자, "unit": "단위"}}]
+              }},
               "objectives": ["최적화 목표 1", "최적화 목표 2"],
-              "constraints": {
+              "constraints": {{
                 "safety": ["안전 제약 1", "안전 제약 2"],
                 "operational": ["운영 제약 1", "운영 제약 2"]
-              },
-              "recommended_parameters": {"권장 파라미터명": 값, "...": "..."},
+              }},
+              "recommended_parameters": {{"권장 파라미터명": 값, "...": "..."}},
               "rationale": "추천 근거를 간결히 기술",
               "execution_notes": "적용 시 주의사항 및 롤백 전략 등"
-            }
+            }}
             """
             autonomous_control_agent_query_request = AgentInvokeRequest(
                 prompt=autonomous_control_agent_query,

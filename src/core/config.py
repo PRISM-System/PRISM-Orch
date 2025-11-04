@@ -28,6 +28,8 @@ class Settings(BaseSettings):
 
     # Platform API Endpoints
     PLATFORM_API_ENDPOINT: str = ""
+    PLATFORM_ID: str = ""
+    PLATFORM_PW: str = ""
     MONITORING_API_ENDPOINT: str = ""
     PREDICTION_API_ENDPOINT: str = ""
     AUTOCONTROL_API_ENDPOINT: str = ""
