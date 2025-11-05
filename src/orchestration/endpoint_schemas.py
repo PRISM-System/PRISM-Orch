@@ -1,9 +1,16 @@
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 
+class TimeSeriesInfo(BaseModel):
+    timestamp: Dict[str, str] = Field(..., description="시간 범위 (start, end)")
+    process: str = Field(..., description="공정 타입 (CMP, Etching, Deposition 등)")
+    target_variable: Any = Field(..., description="대상 변수 (단일 또는 리스트)")
+    source_variables: List[str] = Field(..., description="소스 변수 리스트")
+
 class MonitoringAgentRequest(BaseModel):
     taskId: str = Field(..., description="작업 ID (session id)")
     query: str = Field(..., description="사용자 질의")
+    timeseries_info: Optional[TimeSeriesInfo] = Field(default=None, description="시계열 정보")
 
 class MonitoringAgentResponse(BaseModel):
     result: str = Field(..., description="모니터링 에이전트 응답")
@@ -11,6 +18,15 @@ class MonitoringAgentResponse(BaseModel):
 class PredictionAgentRequest(BaseModel):
     taskId: str = Field(..., description="작업 ID (session id)")
     query: str = Field(..., description="사용자 질의")
+    timeseries_info: Optional[TimeSeriesInfo] = Field(default=None, description="시계열 정보")
+    timeRange: Optional[Dict[str, str]] = Field(default=None, description="시간 범위 (start, end)")
+    sensor_name: Optional[str] = Field(default=None, description="센서 이름")
+    target_cols: Optional[List[str]] = Field(default=None, description="예측 대상 컬럼")
+    feature_cols: Optional[List[str]] = Field(default=None, description="특성 컬럼")
+    prediction_horizon_minutes: Optional[int] = Field(default=None, description="예측 시간 범위 (분)")
+    prediction_interval_minutes: Optional[int] = Field(default=None, description="예측 간격 (분)")
+    model_type: Optional[str] = Field(default=None, description="모델 타입 (lstm 등)")
+    confidence_level: Optional[float] = Field(default=None, description="신뢰 수준 (0.95 등)")
 
 class PredictionAgentResponse(BaseModel):
     result: str = Field(..., description="예측 에이전트 응답")
@@ -18,6 +34,15 @@ class PredictionAgentResponse(BaseModel):
 class AutonomousControlAgentRequest(BaseModel):
     taskId: str = Field(..., description="작업 ID (session id)")
     query: str = Field(..., description="사용자 질의")
+    timeseries_info: Optional[TimeSeriesInfo] = Field(default=None, description="시계열 정보")
+    feature_names: Optional[List[str]] = Field(default=None, description="제어 변수 이름 리스트")
+    target_col: Optional[str] = Field(default=None, description="제어 대상 컬럼")
+    control_setpoint: Optional[float] = Field(default=None, description="제어 목표값")
+    control_horizon_minutes: Optional[int] = Field(default=None, description="제어 시간 범위 (분)")
+    constraints: Optional[Dict[str, Dict[str, Any]]] = Field(default=None, description="제어 변수 제약 조건")
+    optimization_objective: Optional[str] = Field(default=None, description="최적화 목표")
+    safety_mode: Optional[bool] = Field(default=None, description="안전 모드 활성화 여부")
+    simulation_before_apply: Optional[bool] = Field(default=None, description="적용 전 시뮬레이션 여부")
 
 class AutonomousControlAgentResponse(BaseModel):
     result: str = Field(..., description="자율제어 에이전트 응답")

@@ -97,6 +97,23 @@ class OrchestrationResponse(BaseModel):
         default=None,
         description="마크다운 형태의 종합 리포트(선택)"
     )
+    # AGI-platform 호환성을 위한 추가 필드들
+    response: Optional[str] = Field(
+        default=None,
+        description="final_answer와 동일한 값 (호환성용)"
+    )
+    content: Optional[str] = Field(
+        default=None,
+        description="final_answer와 동일한 값 (호환성용)"
+    )
+    result: Optional[str] = Field(
+        default=None,
+        description="final_answer와 동일한 값 (호환성용)"
+    )
+    message: Optional[str] = Field(
+        default=None,
+        description="final_answer와 동일한 값 (호환성용)"
+    )
     flow_chart_data: Dict[str, Any] = Field(
         ...,
         description="에이전트 협업 과정을 시각화한 플로우 차트 데이터 (UI에서 렌더링)"

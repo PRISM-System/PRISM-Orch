@@ -19,6 +19,7 @@ services:
     volumes:
       - ./src:/app/src
       - ./dev:/app/dev
+      - ./data:/app/data
       - ../prism-core/prism_core:/app/prism_core
     environment:
       - PRISM_CORE_BASE_URL=${PRISM_CORE_BASE_URL}

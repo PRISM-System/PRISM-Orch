@@ -39,10 +39,11 @@ async def run_orchestration(
     session_id = query.session_id or f"session_{uuid.uuid4()}"
 
     # Invoke high-level orchestrator (includes LLM-based decomposition, tool calls, RAG + compliance)
-    print(f"🚀 [API] Invoking orchestrator...\n {query.extra_body}", file=sys.stderr, flush=False)
+    print(f"🚀 [API] Invoking orchestrator with session_id={session_id}...\n {query.extra_body}", file=sys.stderr, flush=False)
     agent_resp = await orchestrator.orchestrate(
         prompt=query.query,
         user_id=query.user_id,
+        session_id=session_id,
         max_tokens=query.max_tokens,
         temperature=query.temperature,
         stop=query.stop,
@@ -72,11 +73,24 @@ async def run_orchestration(
                     if isinstance(docs, list):
                         compliance_evidence.extend([str(d) for d in docs])
 
+    # metadata에서 각 형식별 응답 추출 (없으면 기본값 사용)
+    metadata = agent_resp.metadata or {}
+    final_answer_text = metadata.get("final_answer", agent_resp.text)
+    final_markdown_text = metadata.get("final_markdown", agent_resp.text)
+    response_text = metadata.get("response", agent_resp.text)
+    content_text = metadata.get("content", agent_resp.text)
+    result_text = metadata.get("result", agent_resp.text)
+    message_text = metadata.get("message", agent_resp.text)
+
     return OrchestrationResponse(
         user_id=query.user_id,
         session_id=session_id,
-        final_answer=agent_resp.text,
-        final_markdown=agent_resp.text,
+        final_answer=final_answer_text,
+        final_markdown=final_markdown_text,
+        response=response_text,
+        content=content_text,
+        result=result_text,
+        message=message_text,
         flow_chart_data={"nodes": [], "edges": []},
         supporting_documents=supporting_docs,
         task_history=[],
