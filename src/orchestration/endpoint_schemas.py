@@ -58,6 +58,7 @@ class OrchestrationProgress(BaseModel):
     "current_step": "monitoring",
     "current_progress": 100,
     "user_request": "A-1 라인의 이상 여부를 확인해줘.",
+    "workflow_type": "monitoring_only",
     "orchestration_plan": "{orchestration_plan}"
     "monitoring_agent_response": "{monitoring_agent_response}"
     "prediction_agent_response": "{prediction_agent_response}"
@@ -70,6 +71,7 @@ class OrchestrationProgress(BaseModel):
     current_progress: Optional[int] = Field(default=None, description="현재 진행률")
     status: Optional[str] = Field(default=None, description="상태")
     user_request: Optional[str] = Field(default=None, description="사용자 요청")
+    workflow_type: Optional[str] = Field(default=None, description="워크플로우 타입 (monitoring_only, monitoring_prediction, monitoring_prediction_control, full_compliance)")
     orchestration_plan: Optional[str] = Field(default=None, description="오케스트레이션 계획")
     monitoring_agent_response: Optional[str] = Field(default=None, description="모니터링 에이전트 응답")
     prediction_agent_response: Optional[str] = Field(default=None, description="예측 에이전트 응답")

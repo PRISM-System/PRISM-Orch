@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import uvicorn
+import os
 from .core.config import settings
 print("🔧 [IMPORT] Settings imported")
 from .api.endpoints import orchestration
@@ -67,12 +68,14 @@ if __name__ == "__main__":
         config.bind = [f"{settings.APP_HOST}:{settings.APP_PORT}"]
         hypercorn.asyncio.serve(app, config)
     else:
-        print(f"🔧 Starting uvicorn on {settings.APP_HOST}:{settings.APP_PORT}")
+        # Hot reload for development (set DEV_MODE=true in .env)
+        reload_enabled = os.getenv("DEV_MODE", "false").lower() == "true"
+        print(f"🔧 Starting uvicorn on {settings.APP_HOST}:{settings.APP_PORT} (reload={reload_enabled})")
         uvicorn.run(
             "src.main:app",
             host=settings.APP_HOST,
             port=settings.APP_PORT,
-            reload=False,
+            reload=reload_enabled,
             workers=1,
             access_log=True,
             log_level="debug"  # Enable debug logging

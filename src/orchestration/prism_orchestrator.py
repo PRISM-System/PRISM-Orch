@@ -253,15 +253,60 @@ class PrismOrchestrator:
         """모니터링 에이전트 직접 호출
         사용 엔드포인트:
             - POST {monitoring_agent_endpoint}/api/v1/workflow/start
+
+        request_text의 구체성을 판단하여:
+        - 구체적인 경우: 그대로 사용
+        - 불충분한 경우: LLM을 통해 정제
         """
         try:
             import asyncio
 
-            # 모니터링 에이전트 API 요청 페이로드
-            payload = {
-                "taskId": session_id,
-                "query": request_text
-            }
+            # Query 구체성 판단 (간단한 휴리스틱)
+            # 구체적 = 센서명, 시간범위, 변수명 등이 포함된 경우
+            is_specific_query = (
+                len(request_text) > 30 and  # 최소 길이
+                any(keyword in request_text for keyword in ["센서", "공정", "SENSOR", "PROCESS", "시간", "범위"]) and
+                any(keyword in request_text for keyword in ["분석", "감지", "확인", "모니터링", "상태"])
+            )
+
+            final_query = request_text
+
+            if not is_specific_query:
+                # Query가 불충분하면 LLM을 통해 정제
+                print(f"🔧 [MONITORING] Query 불충분 - LLM을 통해 정제", file=sys.stderr, flush=True)
+                refine_prompt = f"""
+                현재 수행 내역을 바탕으로 모니터링 에이전트가 수행해야 할 작업을 구체적으로 명시해주세요.
+                모니터링 에이전트는 현재 시스템들의 상태를 관찰하고 이상치, 이상치 후보, 미래 이상치 발생 가능성이 높은 지점들을 탐지합니다.
+
+                사용자 요청: {request_text}
+
+                위 요청을 모니터링 에이전트가 수행할 수 있도록 구체적인 쿼리로 변환해주세요.
+                """
+
+                refine_request = AgentInvokeRequest(
+                    prompt=refine_prompt,
+                    max_tokens=512,
+                    temperature=0.7,
+                    stop=None,
+                    use_tools=False,
+                    max_tool_calls=0,
+                    extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+                    user_id=None,
+                    tool_for_use=None
+                )
+                refined_response = await self.llm.invoke_agent(self._agent, refine_request)
+                final_query = refined_response.text if refined_response.text else request_text
+                print(f"🔧 [MONITORING] 정제된 query: {final_query[:100]}...", file=sys.stderr, flush=True)
+            else:
+                print(f"✅ [MONITORING] Query 충분히 구체적 - 그대로 사용", file=sys.stderr, flush=True)
+
+            # 모니터링 에이전트 API 요청 페이로드 (Pydantic 모델 사용)
+            from src.orchestration.endpoint_schemas import MonitoringAgentRequest
+            request_model = MonitoringAgentRequest(
+                taskId=session_id,
+                query=final_query
+            )
+            payload = request_model.model_dump()
 
             print(f"📡 모니터링 에이전트 호출: {self.monitoring_agent_endpoint}", file=sys.stderr, flush=True)
 
@@ -299,12 +344,32 @@ class PrismOrchestrator:
         """
         try:
             import asyncio
+            import re
+            from datetime import datetime
 
-            # 예측 에이전트 API 요청 페이로드
-            payload = {
-                "taskId": session_id,
-                "query": request_text
-            }
+            # taskId에서 공정 타입 추출 또는 기본값 사용
+            # module.py의 TASK_TO_SENSOR_KEY 패턴과 일치하도록 taskId 생성
+            process_type = "CMP"  # 기본값
+            if re.search(r'etch|ETCH', request_text, re.I):
+                process_type = "ETCH"
+            elif re.search(r'dep|deposition|DEPOSITION', request_text, re.I):
+                process_type = "DEP"
+            elif re.search(r'paint|PAINT', request_text, re.I):
+                process_type = "PAINT"
+            elif re.search(r'cmp|CMP|slurry|SLURRY', request_text, re.I):
+                process_type = "CMP"
+
+            # Prediction Agent가 인식할 수 있는 taskId 형식 생성
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            task_id = f"{process_type}_{session_id}_{timestamp}"
+
+            # 예측 에이전트 API 요청 페이로드 (Pydantic 모델 사용)
+            from src.orchestration.endpoint_schemas import PredictionAgentRequest
+            request_model = PredictionAgentRequest(
+                taskId=task_id,
+                query=request_text
+            )
+            payload = request_model.model_dump()
 
             print(f"📡 예측 에이전트 호출: {self.prediction_agent_endpoint}", file=sys.stderr, flush=True)
 
@@ -344,24 +409,13 @@ class PrismOrchestrator:
         try:
             import asyncio
 
-            # 자율제어 에이전트 API 요청 페이로드
-            # OrchestrationAssignRequest 스키마에 맞춤
-            payload = {
-                "taskId": session_id,
-                "query": request_text,
-                "feature_names": ["PRESSURE", "TEMPERATURE"],  # 기본값 (실제로는 모니터링/예측 결과에서 추출)
-                "target_col": "PRESSURE",  # 기본값
-                "control_setpoint": 100.0,  # 기본값
-                "control_horizon_minutes": 60,  # 기본값
-                "constraints": None,
-                "optimization_objective": "minimize_deviation",  # 기본값
-                "safety_mode": True,
-                "simulation_before_apply": True,
-                "timeseries_info": {
-                    "source_variables": ["PRESSURE", "TEMPERATURE"],  # 기본값
-                    "target_variable": "PRESSURE"  # 기본값
-                }
-            }
+            # 자율제어 에이전트 API 요청 페이로드 (Pydantic 모델 사용)
+            from src.orchestration.endpoint_schemas import AutonomousControlAgentRequest
+            request_model = AutonomousControlAgentRequest(
+                taskId=session_id,
+                query=request_text
+            )
+            payload = request_model.model_dump()
 
             # 엔드포인트 URL에서 {task_id} 치환
             endpoint_url = self.autonomous_control_agent_endpoint.replace("{task_id}", session_id)
@@ -982,6 +1036,244 @@ class PrismOrchestrator:
         except Exception as e:
             print(f"❌ 에이전트 등록 실패: {str(e)}")
 
+    async def _determine_initial_workflow(self, user_query: str) -> str:
+        """
+        사용자 쿼리를 분석하여 초기 워크플로우 타입을 결정합니다.
+
+        Returns:
+            workflow_type: "monitoring_only", "monitoring_prediction", "monitoring_prediction_control", "full_compliance"
+        """
+        import sys
+        print(f"[WORKFLOW-DECISION] 초기 워크플로우 타입 결정 중...", file=sys.stderr, flush=True)
+
+        # 텍스트 정리
+        safe_user_query = self._sanitize_text_for_prompt(user_query, 200)
+
+        analysis_prompt = f"""
+사용자 요청을 분석하여 필요한 워크플로우 레벨을 결정해주세요.
+
+사용자 요청: {safe_user_query}
+
+워크플로우 타입:
+1. monitoring_only: 현재 상태 분석만 필요 (예: "현재 상태 확인", "이상 여부 분석")
+2. monitoring_prediction: 현재 상태 분석 + 미래 예측 필요 (예: "언제 임계치 도달?", "추세 분석")
+3. monitoring_prediction_control: 모니터링 + 예측 + 자동 제어 필요 (예: "자동으로 안정화", "제어 권장")
+4. full_compliance: 모니터링 + 예측 + 제어 + 규제 준수 확인 필요 (예: "규정 준수 확인", "안전 규정")
+
+반드시 JSON 형식으로만 응답하세요:
+{{"workflow_type": "monitoring_only|monitoring_prediction|monitoring_prediction_control|full_compliance", "reason": "판단 근거"}}
+"""
+
+        try:
+            request = AgentInvokeRequest(
+                prompt=analysis_prompt,
+                max_tokens=200,
+                temperature=0.3,
+                use_tools=False,
+                extra_body={"chat_template_kwargs": {"enable_thinking": False}}
+            )
+            response = await self.llm.invoke_agent(self._agent, request)
+
+            import json
+            # DEBUG: LLM 전체 응답 출력
+            print(f"[WORKFLOW-DEBUG] Full LLM response:\n{response.text}", file=sys.stderr, flush=True)
+
+            # JSON 추출 시도 (markdown code block 처리)
+            response_text = response.text.strip()
+            if "```json" in response_text:
+                # markdown code block에서 JSON 추출
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                # generic code block에서 추출
+                response_text = response_text.split("```")[1].split("```")[0].strip()
+
+            result = json.loads(response_text)
+            workflow_type = result.get("workflow_type", "monitoring_only")
+            reason = result.get("reason", "")
+
+            print(f"[WORKFLOW-DECISION] 초기 워크플로우: {workflow_type} (이유: {reason})", file=sys.stderr, flush=True)
+            return workflow_type
+
+        except Exception as e:
+            print(f"[WORKFLOW-DECISION] 결정 실패, 기본값 사용: {e}", file=sys.stderr, flush=True)
+            return "monitoring_only"
+
+    def _extract_json_from_response(self, response_text: str) -> str:
+        """LLM 응답에서 JSON을 추출합니다 (markdown code block 처리 포함)"""
+        text = response_text.strip()
+        # markdown code block에서 JSON 추출
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0].strip()
+        return text
+
+    def _sanitize_text_for_prompt(self, text: str, max_length: int = 500) -> str:
+        """프롬프트에 안전하게 삽입할 수 있도록 텍스트를 정리합니다"""
+        if not text:
+            return ""
+        # 길이 제한
+        text = text[:max_length]
+        # 백슬래시를 공백으로 변환 (JSON 파싱 에러 방지)
+        text = text.replace('\\', ' ')
+        # 따옴표를 작은따옴표로 변경, 줄바꿈 제거
+        text = text.replace('"', "'").replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+        # 제어 문자 제거
+        text = ''.join(char if ord(char) >= 32 or char in ['\n', '\r', '\t'] else ' ' for char in text)
+        # 연속된 공백 제거
+        text = ' '.join(text.split())
+        return text
+
+    async def _should_call_prediction(self, user_query: str, monitoring_result: str) -> bool:
+        """
+        Monitoring 결과를 분석하여 Prediction Agent 호출이 필요한지 판단합니다.
+        """
+        import sys
+        print(f"[WORKFLOW-DECISION] Prediction Agent 호출 필요성 판단 중...", file=sys.stderr, flush=True)
+
+        # 텍스트 정리
+        safe_monitoring_result = self._sanitize_text_for_prompt(monitoring_result, 500)
+
+        analysis_prompt = f"""
+모니터링 결과를 분석하여 예측이 필요한지 판단해주세요.
+
+사용자 요청: {user_query}
+모니터링 결과: {safe_monitoring_result}
+
+예측이 필요한 경우:
+- 추세가 감지됨 (상승/하락 패턴)
+- 이상치가 발견됨
+- 임계치 근접 상황
+- 미래 상태 예측 요청
+
+반드시 JSON 형식으로만 응답하세요:
+{{"needs_prediction": true|false, "reason": "판단 근거"}}
+"""
+
+        try:
+            request = AgentInvokeRequest(
+                prompt=analysis_prompt,
+                max_tokens=4096,
+                temperature=0.3,
+                use_tools=False,
+                extra_body={"chat_template_kwargs": {"enable_thinking": False}}
+            )
+            response = await self.llm.invoke_agent(self._agent, request)
+
+            import json
+            # DEBUG: LLM 전체 응답 출력
+            print(f"[SHOULD_CALL_PREDICTION-DEBUG] Full LLM response:\n{response.text}", file=sys.stderr, flush=True)
+
+            result = json.loads(self._extract_json_from_response(response.text))
+            needs_prediction = result.get("needs_prediction", False)
+            reason = result.get("reason", "")
+
+            print(f"[WORKFLOW-DECISION] Prediction 필요: {needs_prediction} (이유: {reason})", file=sys.stderr, flush=True)
+            return needs_prediction
+
+        except Exception as e:
+            print(f"[WORKFLOW-DECISION] 판단 실패, 기본값 False: {e}", file=sys.stderr, flush=True)
+            return False
+
+    async def _should_call_control(self, user_query: str, prediction_result: str) -> bool:
+        """
+        Prediction 결과를 분석하여 AutoControl Agent 호출이 필요한지 판단합니다.
+        """
+        import sys
+        print(f"[WORKFLOW-DECISION] AutoControl Agent 호출 필요성 판단 중...", file=sys.stderr, flush=True)
+
+        # 텍스트 정리
+        safe_prediction_result = self._sanitize_text_for_prompt(prediction_result, 500)
+
+        analysis_prompt = f"""
+예측 결과를 분석하여 자동 제어가 필요한지 판단해주세요.
+
+사용자 요청: {user_query}
+예측 결과: {safe_prediction_result}
+
+제어가 필요한 경우:
+- 임계치 초과 예상
+- 불안정한 추세 예측
+- 사용자가 명시적으로 제어/안정화 요청
+- 자동 조치 필요 상황
+
+반드시 JSON 형식으로만 응답하세요:
+{{"needs_control": true|false, "reason": "판단 근거"}}
+"""
+
+        try:
+            request = AgentInvokeRequest(
+                prompt=analysis_prompt,
+                max_tokens=4096,
+                temperature=0.3,
+                use_tools=False,
+                extra_body={"chat_template_kwargs": {"enable_thinking": False}}
+            )
+            response = await self.llm.invoke_agent(self._agent, request)
+
+            import json
+            # DEBUG: LLM 전체 응답 출력
+            print(f"[SHOULD_CALL_CONTROL-DEBUG] Full LLM response:\n{response.text}", file=sys.stderr, flush=True)
+
+            result = json.loads(self._extract_json_from_response(response.text))
+            needs_control = result.get("needs_control", False)
+            reason = result.get("reason", "")
+
+            print(f"[WORKFLOW-DECISION] AutoControl 필요: {needs_control} (이유: {reason})", file=sys.stderr, flush=True)
+            return needs_control
+
+        except Exception as e:
+            print(f"[WORKFLOW-DECISION] 판단 실패, 기본값 False: {e}", file=sys.stderr, flush=True)
+            return False
+
+    async def _should_call_compliance(self, user_query: str, control_result: str) -> bool:
+        """
+        AutoControl 결과를 분석하여 Compliance Check가 필요한지 판단합니다.
+        """
+        import sys
+        print(f"[WORKFLOW-DECISION] Compliance Check 필요성 판단 중...", file=sys.stderr, flush=True)
+
+        # 텍스트 정리
+        safe_control_result = self._sanitize_text_for_prompt(control_result, 500)
+
+        analysis_prompt = f"""
+자동 제어 결과를 분석하여 안전 규정 준수 확인이 필요한지 판단해주세요.
+
+사용자 요청: {user_query}
+자동 제어 결과: {safe_control_result}
+
+규정 준수 확인이 필요한 경우:
+- 파라미터 변경이 권장됨
+- 안전 관련 조치 제안됨
+- 사용자가 명시적으로 규정 확인 요청
+- 중요 시스템 변경 제안
+
+반드시 JSON 형식으로만 응답하세요:
+{{"needs_compliance": true|false, "reason": "판단 근거"}}
+"""
+
+        try:
+            request = AgentInvokeRequest(
+                prompt=analysis_prompt,
+                max_tokens=4096,
+                temperature=0.3,
+                use_tools=False,
+                extra_body={"chat_template_kwargs": {"enable_thinking": False}}
+            )
+            response = await self.llm.invoke_agent(self._agent, request)
+
+            import json
+            result = json.loads(self._extract_json_from_response(response.text))
+            needs_compliance = result.get("needs_compliance", False)
+            reason = result.get("reason", "")
+
+            print(f"[WORKFLOW-DECISION] Compliance 필요: {needs_compliance} (이유: {reason})", file=sys.stderr, flush=True)
+            return needs_compliance
+
+        except Exception as e:
+            print(f"[WORKFLOW-DECISION] 판단 실패, 기본값 False: {e}", file=sys.stderr, flush=True)
+            return False
+
     async def orchestrate(
         self, 
         prompt: str, 
@@ -1079,7 +1371,12 @@ class PrismOrchestrator:
             # Save conversation to memory if user_id is provided
             if user_id and self._memory_tool:
                 await self._save_conversation_to_memory(user_id, prompt, refinement_response.text)
-            
+
+            # ===== DYNAMIC WORKFLOW DECISION =====
+            # Determine initial workflow type based on user query
+            initial_workflow_type = await self._determine_initial_workflow(prompt)
+            curr_orch_prog.workflow_type = initial_workflow_type
+            print(f"🔧 [ORCHESTRATE-5] Initial workflow type: {initial_workflow_type}", file=sys.stderr, flush=True)
 
             # make query for monitoring agent
             monitoring_agent_query = f"""
@@ -1117,142 +1414,188 @@ class PrismOrchestrator:
                 orch_progress=curr_orch_prog
             )
             print(f"🔧 [ORCHESTRATE-6] Monitoring agent response received: {monitoring_agent_response}", file=sys.stderr, flush=True)
-            
-            # call prediction agent
-            prediction_agent_query = f"""
-            현재 수행 내역을 바탕으로 예측 에이전트가 수행해야 할 작업을 결정해주세요.
-            특히 예측 에이전트는 현재 시스템들의 상태를 관찰하고 이상치, 이상치 후보, 미래 이상치 발생 가능성이 높은 지점들을 탐지할 예정입니다. 
-            이에 맞추어 예측 에이전트가 수행해야 할 작업을 결정해주세요.
-            
-            사용자 요청: {prompt}
-            수행 내역: {curr_orch_prog.orchestration_plan}
-            모니터링 에이전트 수행 결과: {curr_orch_prog.monitoring_agent_response}
-            """
-            prediction_agent_query_request = AgentInvokeRequest(
-                prompt=prediction_agent_query,
-                max_tokens=1024,
-                temperature=0.7,
-                stop=None,
-                use_tools=False,
-                max_tool_calls=0,
-                extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
-                user_id=user_id,
-                tool_for_use=None
-            )
-            prediction_agent_query = await self.llm.invoke_agent(self._agent, prediction_agent_query_request)
-            prediction_agent_response = await self._call_prediction_agent(
-                session_id=session_id,
-                request_text=prediction_agent_query.text
-            )
-            curr_orch_prog.prediction_agent_response = prediction_agent_response.result
-            await self._call_platform_base(
-                orch_progress=curr_orch_prog
-            )
-            print(f"🔧 [ORCHESTRATE-7] Prediction agent response received: {prediction_agent_response}", file=sys.stderr, flush=True)
 
-            # call autonomous control agent
-            autonomous_control_agent_query = f"""
-            아래 컨텍스트를 바탕으로 최적의 제어 파라미터를 제안하세요. 반드시 아래 JSON 스키마를 정확히 만족하는 한 개의 JSON 객체로만 응답하세요. 추가 설명이나 주석, 코드블록 마커는 금지합니다.
+            # ===== CONDITIONAL PREDICTION AGENT CALL =====
+            # Determine if prediction agent should be called based on initial workflow type or intermediate result analysis
+            should_predict = (
+                initial_workflow_type in ["monitoring_prediction", "monitoring_prediction_control", "full_compliance"]
+                or await self._should_call_prediction(prompt, curr_orch_prog.monitoring_agent_response or "")
+            )
 
-            [컨텍스트]
-            - 사용자 요청: {prompt}
-            - 오케스트레이션 계획: {curr_orch_prog.orchestration_plan}
-            - 모니터링 결과: {curr_orch_prog.monitoring_agent_response}
-            - 예측 결과: {curr_orch_prog.prediction_agent_response}
+            if should_predict:
+                # Upgrade workflow type if prediction is called
+                if curr_orch_prog.workflow_type == "monitoring_only":
+                    curr_orch_prog.workflow_type = "monitoring_prediction"
+                print(f"🔧 [ORCHESTRATE-6.5] Prediction Agent 호출 결정됨 (workflow_type={curr_orch_prog.workflow_type})", file=sys.stderr, flush=True)
 
-            [응답 JSON 스키마]
-            {{
-              "target_system": "제어 대상 시스템명 또는 식별자",
-              "current_parameters": {{"파라미터명": 값, "...": "..."}},
-              "prediction_results": {{
-                "horizon": "예측 구간 예: 24h/7d/30d",
-                "key_metrics": [{{"name": "지표명", "value": 숫자, "unit": "단위"}}]
-              }},
-              "objectives": ["최적화 목표 1", "최적화 목표 2"],
-              "constraints": {{
-                "safety": ["안전 제약 1", "안전 제약 2"],
-                "operational": ["운영 제약 1", "운영 제약 2"]
-              }},
-              "recommended_parameters": {{"권장 파라미터명": 값, "...": "..."}},
-              "rationale": "추천 근거를 간결히 기술",
-              "execution_notes": "적용 시 주의사항 및 롤백 전략 등"
-            }}
-            """
-            autonomous_control_agent_query_request = AgentInvokeRequest(
-                prompt=autonomous_control_agent_query,
-                max_tokens=1024,
-                temperature=0.7,
-                stop=None,
-                use_tools=False,
-                max_tool_calls=0,
-                extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
-                user_id=user_id,
-                tool_for_use=None
-            )
-            autonomous_control_agent_query = await self.llm.invoke_agent(self._agent, autonomous_control_agent_query_request)
-            autonomous_control_agent_response = await self._call_autonomous_control_agent(
-                session_id=session_id,
-                request_text=autonomous_control_agent_query.text
-            )
-            curr_orch_prog.autonomous_control_agent_response = autonomous_control_agent_response.result
-            await self._call_platform_base(
-                orch_progress=curr_orch_prog
-            )
-            print(f"🔧 [ORCHESTRATE-8] Autonomous control agent response received: {autonomous_control_agent_response}", file=sys.stderr, flush=True)
-            print(f"🔧 [ORCHESTRATE-9] Autonomous control agent query: {autonomous_control_agent_query}", file=sys.stderr, flush=True)
-            print(f"🔧 [ORCHESTRATE-10] Autonomous control agent response received: {autonomous_control_agent_response}", file=sys.stderr, flush=True)
-            print(f"✅ [ORCHESTRATE-11] Orchestration completed successfully", file=sys.stderr, flush=True)
+                # call prediction agent
+                prediction_agent_query = f"""
+                현재 수행 내역을 바탕으로 예측 에이전트가 수행해야 할 작업을 결정해주세요.
+                특히 예측 에이전트는 현재 시스템들의 상태를 관찰하고 이상치, 이상치 후보, 미래 이상치 발생 가능성이 높은 지점들을 탐지할 예정입니다.
+                이에 맞추어 예측 에이전트가 수행해야 할 작업을 결정해주세요.
 
-
-            ## compliance agent
-            # Compliance check를 위한 요청 구성
-            compliance_check_query = f"""
-            사용자 요청과 각 에이전트들의 수행 결과를 바탕으로 안전 규정 준수 여부를 검증해주세요.
-            
-            **검증 대상:**
-            - 사용자 요청: {prompt}
-            - 모니터링 에이전트 결과: {curr_orch_prog.monitoring_agent_response}
-            - 예측 에이전트 결과: {curr_orch_prog.prediction_agent_response}
-            - 자율제어 에이전트 결과: {curr_orch_prog.autonomous_control_agent_response}
-            
-            **검증 목적:**
-            - 제안된 조치나 권장사항이 안전 규정을 준수하는지 확인
-            - 잠재적 위험 요소 식별
-            - 규정 준수를 위한 추가 조치 필요 여부 판단
-            """
-            
-            await self._call_platform_base(
-                orch_progress=curr_orch_prog
-            )
-            
-            # Compliance tool을 사용하여 안전 규정 준수 여부 검증
-            compliance_request = ToolRequest(
-                tool_name="compliance_check",
-                parameters={
-                    "action": f"사용자 요청: {prompt}",
-                    "context": f"모니터링 결과: {curr_orch_prog.monitoring_agent_response}, 예측 결과: {curr_orch_prog.prediction_agent_response}, 자율제어 결과: {curr_orch_prog.autonomous_control_agent_response}",
-                    "user_id": user_id
-                }
-            )
-            
-            # Compliance tool 실행
-            compliance_tool = self.tool_registry.get_tool("compliance_check")
-            if compliance_tool:
-                compliance_result = await compliance_tool.execute(compliance_request)
-                if compliance_result.success:
-                    compliance_data = compliance_result.result
-                    curr_orch_prog.compliance_data = compliance_data
-                    print(f"🔧 [ORCHESTRATE-11] Compliance check completed: {compliance_data}", file=sys.stderr, flush=True)
-                else:
-                    print(f"⚠️ [ORCHESTRATE-11] Compliance check failed: {compliance_result.error_message}", file=sys.stderr, flush=True)
-                    compliance_data = {"compliance_status": "check_failed", "risk_level": "unknown"}
+                사용자 요청: {prompt}
+                수행 내역: {curr_orch_prog.orchestration_plan}
+                모니터링 에이전트 수행 결과: {curr_orch_prog.monitoring_agent_response}
+                """
+                prediction_agent_query_request = AgentInvokeRequest(
+                    prompt=prediction_agent_query,
+                    max_tokens=1024,
+                    temperature=0.7,
+                    stop=None,
+                    use_tools=False,
+                    max_tool_calls=0,
+                    extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                    user_id=user_id,
+                    tool_for_use=None
+                )
+                prediction_agent_query = await self.llm.invoke_agent(self._agent, prediction_agent_query_request)
+                prediction_agent_response = await self._call_prediction_agent(
+                    session_id=session_id,
+                    request_text=prediction_agent_query.text
+                )
+                curr_orch_prog.prediction_agent_response = prediction_agent_response.result
+                await self._call_platform_base(
+                    orch_progress=curr_orch_prog
+                )
+                print(f"🔧 [ORCHESTRATE-7] Prediction agent response received: {prediction_agent_response}", file=sys.stderr, flush=True)
             else:
-                print(f"⚠️ [ORCHESTRATE-11] Compliance tool not found", file=sys.stderr, flush=True)
-                compliance_data = {"compliance_status": "tool_not_found", "risk_level": "unknown"}
-            
-            await self._call_platform_base(
-                orch_progress=curr_orch_prog
-            )
+                print(f"⏭️ [ORCHESTRATE-7] Prediction Agent 호출 건너뜀 (workflow_type={curr_orch_prog.workflow_type})", file=sys.stderr, flush=True)
+
+            # ===== CONDITIONAL AUTOCONTROL AGENT CALL =====
+            # AutoControl agent should only be called if prediction was performed
+            should_control = False
+            if should_predict and curr_orch_prog.prediction_agent_response:
+                should_control = (
+                    initial_workflow_type in ["monitoring_prediction_control", "full_compliance"]
+                    or await self._should_call_control(prompt, curr_orch_prog.prediction_agent_response or "")
+                )
+
+            if should_control:
+                # Upgrade workflow type if control is called
+                if curr_orch_prog.workflow_type in ["monitoring_only", "monitoring_prediction"]:
+                    curr_orch_prog.workflow_type = "monitoring_prediction_control"
+                print(f"🔧 [ORCHESTRATE-7.5] AutoControl Agent 호출 결정됨 (workflow_type={curr_orch_prog.workflow_type})", file=sys.stderr, flush=True)
+
+                # call autonomous control agent
+                autonomous_control_agent_query = f"""
+                아래 컨텍스트를 바탕으로 최적의 제어 파라미터를 제안하세요. 반드시 아래 JSON 스키마를 정확히 만족하는 한 개의 JSON 객체로만 응답하세요. 추가 설명이나 주석, 코드블록 마커는 금지합니다.
+
+                [컨텍스트]
+                - 사용자 요청: {prompt}
+                - 오케스트레이션 계획: {curr_orch_prog.orchestration_plan}
+                - 모니터링 결과: {curr_orch_prog.monitoring_agent_response}
+                - 예측 결과: {curr_orch_prog.prediction_agent_response}
+
+                [응답 JSON 스키마]
+                {{
+                  "target_system": "제어 대상 시스템명 또는 식별자",
+                  "current_parameters": {{"파라미터명": 값, "...": "..."}},
+                  "prediction_results": {{
+                    "horizon": "예측 구간 예: 24h/7d/30d",
+                    "key_metrics": [{{"name": "지표명", "value": 숫자, "unit": "단위"}}]
+                  }},
+                  "objectives": ["최적화 목표 1", "최적화 목표 2"],
+                  "constraints": {{
+                    "safety": ["안전 제약 1", "안전 제약 2"],
+                    "operational": ["운영 제약 1", "운영 제약 2"]
+                  }},
+                  "recommended_parameters": {{"권장 파라미터명": 값, "...": "..."}},
+                  "rationale": "추천 근거를 간결히 기술",
+                  "execution_notes": "적용 시 주의사항 및 롤백 전략 등"
+                }}
+                """
+                autonomous_control_agent_query_request = AgentInvokeRequest(
+                    prompt=autonomous_control_agent_query,
+                    max_tokens=1024,
+                    temperature=0.7,
+                    stop=None,
+                    use_tools=False,
+                    max_tool_calls=0,
+                    extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                    user_id=user_id,
+                    tool_for_use=None
+                )
+                autonomous_control_agent_query = await self.llm.invoke_agent(self._agent, autonomous_control_agent_query_request)
+                autonomous_control_agent_response = await self._call_autonomous_control_agent(
+                    session_id=session_id,
+                    request_text=autonomous_control_agent_query.text
+                )
+                curr_orch_prog.autonomous_control_agent_response = autonomous_control_agent_response.result
+                await self._call_platform_base(
+                    orch_progress=curr_orch_prog
+                )
+                print(f"🔧 [ORCHESTRATE-8] Autonomous control agent response received: {autonomous_control_agent_response}", file=sys.stderr, flush=True)
+                print(f"🔧 [ORCHESTRATE-9] Autonomous control agent query: {autonomous_control_agent_query}", file=sys.stderr, flush=True)
+                print(f"🔧 [ORCHESTRATE-10] Autonomous control agent response received: {autonomous_control_agent_response}", file=sys.stderr, flush=True)
+            else:
+                print(f"⏭️ [ORCHESTRATE-8] AutoControl Agent 호출 건너뜀 (workflow_type={curr_orch_prog.workflow_type})", file=sys.stderr, flush=True)
+
+            # ===== CONDITIONAL COMPLIANCE CHECK =====
+            # Compliance check should only be performed if control was applied
+            should_check_compliance = False
+            if should_control and curr_orch_prog.autonomous_control_agent_response:
+                should_check_compliance = (
+                    initial_workflow_type == "full_compliance"
+                    or await self._should_call_compliance(prompt, curr_orch_prog.autonomous_control_agent_response or "")
+                )
+
+            if should_check_compliance:
+                # Upgrade workflow type to full_compliance
+                curr_orch_prog.workflow_type = "full_compliance"
+                print(f"🔧 [ORCHESTRATE-8.5] Compliance Check 실행 결정됨 (workflow_type={curr_orch_prog.workflow_type})", file=sys.stderr, flush=True)
+
+                ## compliance agent
+                # Compliance check를 위한 요청 구성
+                compliance_check_query = f"""
+                사용자 요청과 각 에이전트들의 수행 결과를 바탕으로 안전 규정 준수 여부를 검증해주세요.
+
+                **검증 대상:**
+                - 사용자 요청: {prompt}
+                - 모니터링 에이전트 결과: {curr_orch_prog.monitoring_agent_response}
+                - 예측 에이전트 결과: {curr_orch_prog.prediction_agent_response}
+                - 자율제어 에이전트 결과: {curr_orch_prog.autonomous_control_agent_response}
+
+                **검증 목적:**
+                - 제안된 조치나 권장사항이 안전 규정을 준수하는지 확인
+                - 잠재적 위험 요소 식별
+                - 규정 준수를 위한 추가 조치 필요 여부 판단
+                """
+
+                await self._call_platform_base(
+                    orch_progress=curr_orch_prog
+                )
+
+                # Compliance tool을 사용하여 안전 규정 준수 여부 검증
+                compliance_request = ToolRequest(
+                    tool_name="compliance_check",
+                    parameters={
+                        "action": f"사용자 요청: {prompt}",
+                        "context": f"모니터링 결과: {curr_orch_prog.monitoring_agent_response}, 예측 결과: {curr_orch_prog.prediction_agent_response}, 자율제어 결과: {curr_orch_prog.autonomous_control_agent_response}",
+                        "user_id": user_id
+                    }
+                )
+
+                # Compliance tool 실행
+                compliance_tool = self.tool_registry.get_tool("compliance_check")
+                if compliance_tool:
+                    compliance_result = await compliance_tool.execute(compliance_request)
+                    if compliance_result.success:
+                        compliance_data = compliance_result.result
+                        curr_orch_prog.compliance_data = compliance_data
+                        print(f"🔧 [ORCHESTRATE-11] Compliance check completed: {compliance_data}", file=sys.stderr, flush=True)
+                    else:
+                        print(f"⚠️ [ORCHESTRATE-11] Compliance check failed: {compliance_result.error_message}", file=sys.stderr, flush=True)
+                        compliance_data = {"compliance_status": "check_failed", "risk_level": "unknown"}
+                else:
+                    print(f"⚠️ [ORCHESTRATE-11] Compliance tool not found", file=sys.stderr, flush=True)
+                    compliance_data = {"compliance_status": "tool_not_found", "risk_level": "unknown"}
+
+                await self._call_platform_base(
+                    orch_progress=curr_orch_prog
+                )
+            else:
+                print(f"⏭️ [ORCHESTRATE-11] Compliance Check 건너뜀 (workflow_type={curr_orch_prog.workflow_type})", file=sys.stderr, flush=True)
 
             ## finally aggregate all the results
             final_response = f"""
