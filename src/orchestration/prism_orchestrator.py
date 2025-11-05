@@ -1554,7 +1554,7 @@ class PrismOrchestrator:
             # ===== CONDITIONAL AUTOCONTROL AGENT CALL =====
             # AutoControl agent should only be called if prediction was performed
             should_control = False
-            if should_predict and curr_orch_prog.prediction_agent_response:
+            if should_predict:  # Prediction이 실행되면 응답이 비어있어도 Control 실행 가능
                 if scenario_mode:
                     # 🎯 SCENARIO MODE: 시나리오 워크플로우에 따라 강제 결정
                     should_control = initial_workflow_type in ["monitoring_prediction_control", "full_compliance"]
@@ -1668,7 +1668,7 @@ class PrismOrchestrator:
             # ===== CONDITIONAL COMPLIANCE CHECK =====
             # Compliance check should only be performed if control was applied
             should_check_compliance = False
-            if should_control and curr_orch_prog.autonomous_control_agent_response:
+            if should_control:  # Control이 실행되면 응답이 비어있어도 Compliance 실행 가능
                 if scenario_mode:
                     # 🎯 SCENARIO MODE: 시나리오 워크플로우에 따라 강제 결정
                     should_check_compliance = initial_workflow_type == "full_compliance"
