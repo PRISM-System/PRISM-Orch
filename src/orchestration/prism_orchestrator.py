@@ -20,7 +20,7 @@ from .tools.orch_tool_setup import OrchToolSetup
 from prism_core.core.agents import AgentManager, WorkflowManager
 from .endpoint_schemas import MonitoringAgentRequest, MonitoringAgentResponse, PredictionAgentRequest, PredictionAgentResponse, AutonomousControlAgentRequest, AutonomousControlAgentResponse, PlatformBaseRequest, PlatformBaseResponse, OrchestrationProgress
 from ..core.config import settings
-from ..utils.websocket_util import send_step_start, send_step_complete, send_step_error, send_websocket_update
+from ..utils.websocket_util import send_step_start, send_step_complete, send_step_error, send_websocket_update, clear_session_progress
 
 
 import sys
@@ -1785,7 +1785,25 @@ class PrismOrchestrator:
             )
             final_answer_response = await self.llm.invoke_agent(self._agent, final_answer_request)
             final_answer_text = final_answer_response.text.strip()
-            print(f"✅ [RESPONSE-1] final_answer 생성 완료", file=sys.stderr, flush=True)
+
+            # 응답이 미완성이면 이어서 작성
+            if not self._is_response_complete(final_answer_text):
+                print(f"⚠️ [RESPONSE-1] final_answer가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
+                final_answer_text = await self._complete_llm_response(
+                    initial_response=final_answer_text,
+                    original_prompt=final_answer_prompt,
+                    max_continuations=2,
+                    max_new_tokens=8192,
+                    temperature=0.5,
+                    stop=None,
+                    use_tools=False,
+                    max_tool_calls=0,
+                    extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                    user_id=user_id,
+                    tool_for_use=None
+                )
+
+            print(f"✅ [RESPONSE-1] final_answer 생성 완료 (길이: {len(final_answer_text)} 문자)", file=sys.stderr, flush=True)
 
             # 2. final_markdown 생성: 상세한 마크다운 리포트
             final_markdown_prompt = f"""
@@ -1827,7 +1845,26 @@ class PrismOrchestrator:
             )
             final_markdown_response = await self.llm.invoke_agent(self._agent, final_markdown_request)
             final_markdown_text = final_markdown_response.text.strip()
-            print(f"✅ [RESPONSE-2] final_markdown 생성 완료", file=sys.stderr, flush=True)
+
+            # 응답이 미완성이면 이어서 작성 (마크다운은 더 엄격하게 체크)
+            if not self._is_response_complete(final_markdown_text, is_markdown=True):
+                print(f"⚠️ [RESPONSE-2] final_markdown가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
+                final_markdown_text = await self._complete_llm_response(
+                    initial_response=final_markdown_text,
+                    original_prompt=final_markdown_prompt,
+                    max_continuations=4,  # 마크다운은 더 많은 재시도 허용
+                    is_markdown=True,
+                    max_new_tokens=16384,
+                    temperature=0.6,
+                    stop=None,
+                    use_tools=False,
+                    max_tool_calls=0,
+                    extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                    user_id=user_id,
+                    tool_for_use=None
+                )
+
+            print(f"✅ [RESPONSE-2] final_markdown 생성 완료 (길이: {len(final_markdown_text)} 문자)", file=sys.stderr, flush=True)
 
             # 3. response 생성: 대화형 응답
             response_prompt = f"""
@@ -1850,7 +1887,25 @@ class PrismOrchestrator:
             )
             response_response = await self.llm.invoke_agent(self._agent, response_request)
             response_text = response_response.text.strip()
-            print(f"✅ [RESPONSE-3] response 생성 완료", file=sys.stderr, flush=True)
+
+            # 응답이 미완성이면 이어서 작성
+            if not self._is_response_complete(response_text):
+                print(f"⚠️ [RESPONSE-3] response가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
+                response_text = await self._complete_llm_response(
+                    initial_response=response_text,
+                    original_prompt=response_prompt,
+                    max_continuations=2,
+                    max_new_tokens=8192,
+                    temperature=0.7,
+                    stop=None,
+                    use_tools=False,
+                    max_tool_calls=0,
+                    extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                    user_id=user_id,
+                    tool_for_use=None
+                )
+
+            print(f"✅ [RESPONSE-3] response 생성 완료 (길이: {len(response_text)} 문자)", file=sys.stderr, flush=True)
 
             # 4. content 생성: 구조화된 내용 (JSON 형태의 구조화된 정보)
             content_prompt = f"""
@@ -1877,7 +1932,25 @@ class PrismOrchestrator:
             )
             content_response = await self.llm.invoke_agent(self._agent, content_request)
             content_text = content_response.text.strip()
-            print(f"✅ [RESPONSE-4] content 생성 완료", file=sys.stderr, flush=True)
+
+            # 응답이 미완성이면 이어서 작성
+            if not self._is_response_complete(content_text):
+                print(f"⚠️ [RESPONSE-4] content가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
+                content_text = await self._complete_llm_response(
+                    initial_response=content_text,
+                    original_prompt=content_prompt,
+                    max_continuations=2,
+                    max_new_tokens=8192,
+                    temperature=0.5,
+                    stop=None,
+                    use_tools=False,
+                    max_tool_calls=0,
+                    extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                    user_id=user_id,
+                    tool_for_use=None
+                )
+
+            print(f"✅ [RESPONSE-4] content 생성 완료 (길이: {len(content_text)} 문자)", file=sys.stderr, flush=True)
 
             # 5. result 생성: 핵심 결과 (1문장 결론)
             result_prompt = f"""
@@ -1899,7 +1972,25 @@ class PrismOrchestrator:
             )
             result_response = await self.llm.invoke_agent(self._agent, result_request)
             result_text = result_response.text.strip()
-            print(f"✅ [RESPONSE-5] result 생성 완료", file=sys.stderr, flush=True)
+
+            # 응답이 미완성이면 이어서 작성
+            if not self._is_response_complete(result_text):
+                print(f"⚠️ [RESPONSE-5] result가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
+                result_text = await self._complete_llm_response(
+                    initial_response=result_text,
+                    original_prompt=result_prompt,
+                    max_continuations=2,
+                    max_new_tokens=8192,
+                    temperature=0.4,
+                    stop=None,
+                    use_tools=False,
+                    max_tool_calls=0,
+                    extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                    user_id=user_id,
+                    tool_for_use=None
+                )
+
+            print(f"✅ [RESPONSE-5] result 생성 완료 (길이: {len(result_text)} 문자)", file=sys.stderr, flush=True)
 
             # 6. message 생성: 사용자 친화적 메시지
             message_prompt = f"""
@@ -1922,7 +2013,25 @@ class PrismOrchestrator:
             )
             message_response = await self.llm.invoke_agent(self._agent, message_request)
             message_text = message_response.text.strip()
-            print(f"✅ [RESPONSE-6] message 생성 완료", file=sys.stderr, flush=True)
+
+            # 응답이 미완성이면 이어서 작성
+            if not self._is_response_complete(message_text):
+                print(f"⚠️ [RESPONSE-6] message가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
+                message_text = await self._complete_llm_response(
+                    initial_response=message_text,
+                    original_prompt=message_prompt,
+                    max_continuations=2,
+                    max_new_tokens=8192,
+                    temperature=0.7,
+                    stop=None,
+                    use_tools=False,
+                    max_tool_calls=0,
+                    extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                    user_id=user_id,
+                    tool_for_use=None
+                )
+
+            print(f"✅ [RESPONSE-6] message 생성 완료 (길이: {len(message_text)} 문자)", file=sys.stderr, flush=True)
 
             # PROCESS STAGE 4 완료: 최종 응답 생성 완료 (100%)
             send_step_complete(session_id, "final_response_generation", f"## 최종 답변 생성 완료\n\n{final_markdown_text}", progress=100, agent_name="orchestrator")
@@ -2287,6 +2396,146 @@ class PrismOrchestrator:
             return scenario
         
         return None
+
+    def _is_response_complete(self, text: str, is_markdown: bool = False) -> bool:
+        """응답이 완성되었는지 체크합니다. 더 엄격한 기준 적용."""
+        if not text or len(text) < 10:
+            return False
+        
+        # 마지막 200자를 확인 (더 넓은 컨텍스트)
+        last_part = text[-200:].strip()
+        
+        # 마크다운 특화 체크
+        if is_markdown:
+            # 코드 블록이 열려있는지 확인
+            code_block_count = text.count('```')
+            if code_block_count % 2 != 0:
+                print(f"⚠️ [COMPLETE-CHECK] 마크다운 코드 블록이 닫히지 않음", file=sys.stderr, flush=True)
+                return False
+            
+            # 테이블이 중간에 끊겼는지 확인
+            lines = text.split('\n')
+            last_lines = lines[-5:] if len(lines) >= 5 else lines
+            table_line_count = sum(1 for line in last_lines if '|' in line)
+            if table_line_count >= 2:
+                # 테이블 중간일 가능성
+                last_line = lines[-1].strip()
+                if last_line.startswith('|') and not last_line.endswith('|'):
+                    print(f"⚠️ [COMPLETE-CHECK] 마크다운 테이블이 중간에 끊김", file=sys.stderr, flush=True)
+                    return False
+            
+            # 섹션 헤더로 끝나면 미완성 (다음 내용이 있어야 함)
+            if last_part.startswith('#'):
+                print(f"⚠️ [COMPLETE-CHECK] 섹션 헤더로 끝남 - 내용 필요", file=sys.stderr, flush=True)
+                return False
+            
+            # 리스트 항목으로 끝나면서 내용이 없으면 미완성
+            last_line = lines[-1].strip()
+            if last_line.startswith(('- ', '* ', '+ ', '1. ', '2. ', '3. ')) and len(last_line) < 5:
+                print(f"⚠️ [COMPLETE-CHECK] 빈 리스트 항목으로 끝남", file=sys.stderr, flush=True)
+                return False
+        
+        # "..." 또는 연속된 점으로 끝나면 미완성
+        if last_part.endswith('...') or last_part.endswith('..'):
+            print(f"⚠️ [COMPLETE-CHECK] 생략 부호로 끝남", file=sys.stderr, flush=True)
+            return False
+        
+        # 문장이 중간에 끊긴 것처럼 보이는 패턴
+        incomplete_patterns = [
+            '을 ', '를 ', '은 ', '는 ', '이 ', '가 ', '의 ',  # 조사로 끝남
+            '하는 ', '되는 ', '있는 ', '없는 ',  # 관형형으로 끝남
+            '하고 ', '되고 ', '이고 ', '며 ', '고 ',  # 연결어미로 끝남
+            ', ', '、',  # 쉼표로 끝남
+        ]
+        if any(last_part.endswith(pattern) for pattern in incomplete_patterns):
+            print(f"⚠️ [COMPLETE-CHECK] 문장 중간에 끊김 (incomplete pattern)", file=sys.stderr, flush=True)
+            return False
+        
+        # 문장 종결 부호 체크
+        sentence_endings = ['.', '!', '?', '。', ')', ']', '}']
+        has_sentence_ending = any(last_part.endswith(end) for end in sentence_endings)
+        
+        # 한국어 종결어미 체크 (더 엄격하게)
+        korean_endings = ['다.', '요.', '까?', '죠.', '네.', '니다.', '습니다.', '세요.', '시오.', 
+                         '다!', '요!', '까!', '죠!', '네!', '니다!', '습니다!',
+                         '다)', '요)', '니다)', '습니다)']
+        has_korean_ending = any(last_part.endswith(end) for end in korean_endings)
+        
+        # 둘 중 하나라도 만족하면 완성으로 간주
+        if has_sentence_ending or has_korean_ending:
+            print(f"✅ [COMPLETE-CHECK] 응답 완성 확인됨", file=sys.stderr, flush=True)
+            return True
+        
+        # 기타: 미완성으로 판단
+        print(f"⚠️ [COMPLETE-CHECK] 완성 조건 미충족 - 미완성으로 판단", file=sys.stderr, flush=True)
+        return False
+
+    async def _complete_llm_response(
+        self,
+        initial_response: str,
+        original_prompt: str,
+        max_continuations: int = 2,
+        is_markdown: bool = False,
+        **request_params
+    ) -> str:
+        """미완성 응답을 이어서 작성하여 완성합니다."""
+        complete_text = initial_response
+        continuation_count = 0
+        
+        print(f"🔍 [LLM-CONTINUE] 초기 응답 길이: {len(initial_response)} 문자", file=sys.stderr, flush=True)
+        print(f"🔍 [LLM-CONTINUE] 초기 완성도 체크 시작 (is_markdown={is_markdown})", file=sys.stderr, flush=True)
+        
+        while not self._is_response_complete(complete_text, is_markdown=is_markdown) and continuation_count < max_continuations:
+            continuation_count += 1
+            print(f"🔄 [LLM-CONTINUE] 응답이 미완성입니다. 이어서 작성 시도 {continuation_count}/{max_continuations}", file=sys.stderr, flush=True)
+            
+            # 마지막 500자를 컨텍스트로 제공 (더 많은 컨텍스트)
+            last_context = complete_text[-500:] if len(complete_text) > 500 else complete_text
+            
+            # 이어서 작성 프롬프트
+            continuation_prompt = f"""
+            이전에 작성하던 내용이 중간에 끊겼습니다. 이어서 완성해주세요.
+            
+            **원래 요청:**
+            {original_prompt}
+            
+            **지금까지 작성된 내용의 마지막 부분:**
+            ...{last_context}
+            
+            **지시사항:**
+            - 위 내용의 마지막 부분부터 자연스럽게 이어서 작성하세요
+            - 반드시 한국어로 작성하세요
+            - 완전한 문장으로 끝내세요
+            - 이미 작성된 내용은 반복하지 마세요
+            - 마크다운 형식을 유지하세요
+            - 모든 섹션을 완성하세요
+            """
+            
+            continuation_request = AgentInvokeRequest(
+                prompt=continuation_prompt,
+                **request_params
+            )
+            
+            print(f"📤 [LLM-CONTINUE] LLM 호출 중... (max_new_tokens={request_params.get('max_new_tokens', 'default')})", file=sys.stderr, flush=True)
+            continuation_response = await self.llm.invoke_agent(self._agent, continuation_request)
+            continuation_text = continuation_response.text.strip()
+            
+            if continuation_text:
+                # 이전 텍스트와 연결
+                complete_text = complete_text + "\n\n" + continuation_text
+                print(f"✅ [LLM-CONTINUE] 이어쓰기 완료 (현재 길이: {len(complete_text)} 문자, 추가된 길이: {len(continuation_text)} 문자)", file=sys.stderr, flush=True)
+            else:
+                print(f"⚠️ [LLM-CONTINUE] 이어쓰기 응답이 비어있습니다", file=sys.stderr, flush=True)
+                break
+        
+        if continuation_count >= max_continuations:
+            print(f"⚠️ [LLM-CONTINUE] 최대 재시도 횟수 도달 ({max_continuations}회). 현재 상태로 반환합니다.", file=sys.stderr, flush=True)
+        elif continuation_count == 0:
+            print(f"✅ [LLM-CONTINUE] 초기 응답이 이미 완성되어 있습니다.", file=sys.stderr, flush=True)
+        else:
+            print(f"✅ [LLM-CONTINUE] {continuation_count}회 이어쓰기 후 완성되었습니다.", file=sys.stderr, flush=True)
+        
+        return complete_text
 
     def _extract_monitoring_info_from_scenario(self, scenario: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """시나리오에서 Monitoring에 필요한 정보를 추출합니다."""

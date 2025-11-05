@@ -5,8 +5,11 @@ AGI-Platform에 오케스트레이션 중간 결과를 WebSocket으로 전송하
 import requests
 import sys
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 from ..core.config import settings
+
+# 세션별 마지막 progress 값을 추적 (monotonic 보장)
+_last_progress: Dict[str, int] = {}
 
 
 def send_websocket_update(
@@ -33,6 +36,8 @@ def send_websocket_update(
     Returns:
         bool: 전송 성공 여부
     """
+    global _last_progress
+
     if not settings.PLATFORM_BASE_URL:
         print(f"[WEBSOCKET] PLATFORM_BASE_URL이 설정되지 않음. WebSocket 업데이트 스킵", file=sys.stderr, flush=True)
         return False
@@ -42,6 +47,16 @@ def send_websocket_update(
     payload = {
         "session_id": session_id
     }
+
+    # Progress가 제공된 경우 monotonic 보장
+    if progress is not None:
+        last_progress = _last_progress.get(session_id, 0)
+        if progress < last_progress:
+            print(f"⚠️ [WEBSOCKET] Progress 값 감소 방지: {progress} -> {last_progress} (session={session_id}, step={step_name})",
+                  file=sys.stderr, flush=True)
+            progress = last_progress
+        else:
+            _last_progress[session_id] = progress
 
     if step_name is not None:
         payload["step_name"] = step_name
@@ -115,3 +130,11 @@ def send_step_error(session_id: str, step_name: str, error_message: str, agent_n
         progress=0,
         agent_name=agent_name or "orchestrator"
     )
+
+
+def clear_session_progress(session_id: str) -> None:
+    """세션의 progress 추적 데이터를 정리합니다 (메모리 누수 방지)"""
+    global _last_progress
+    if session_id in _last_progress:
+        del _last_progress[session_id]
+        print(f"[WEBSOCKET] 세션 progress 데이터 정리: {session_id}", file=sys.stderr, flush=True)
