@@ -72,8 +72,16 @@ def send_websocket_update(
         payload["agent_name"] = agent_name
 
     try:
+        # Content 미리보기 (처음 200자만 출력)
+        content_preview = ""
+        if content and len(content) > 0:
+            content_preview = content[:200] + ("..." if len(content) > 200 else "")
+
         print(f"[WEBSOCKET] Sending update to AGI-Platform: session_id={session_id}, step={step_name}, status={status}",
               file=sys.stderr, flush=True)
+        if content_preview:
+            print(f"[WEBSOCKET] Content preview: {content_preview}",
+                  file=sys.stderr, flush=True)
 
         response = requests.post(
             url,

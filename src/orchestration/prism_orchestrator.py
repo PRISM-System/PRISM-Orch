@@ -1307,7 +1307,10 @@ class PrismOrchestrator:
             intent_response = await self.llm.invoke_agent(self._agent, intent_request)
             intent_analysis_text = intent_response.text
             print(f"🔧 [ORCHESTRATE-3] Intent analysis: {intent_analysis_text[:100]}...", file=sys.stderr, flush=True)
-            send_step_complete(session_id, "intent_analysis", f"## 질의 의도 분석 완료\n\n{intent_analysis_text[:200]}...", progress=10, agent_name="orchestrator")
+
+            # 질의 의도 분석 결과 WebSocket 전송 (1000자까지)
+            intent_display = intent_analysis_text if len(intent_analysis_text) <= 1000 else intent_analysis_text[:1000] + "\n\n...(상세 내용은 최종 리포트에서 확인 가능)"
+            send_step_complete(session_id, "intent_analysis", f"## 질의 의도 분석 완료\n\n{intent_display}", progress=10, agent_name="orchestrator")
 
             # ===== PROCESS STAGE 1-2: RAG 지식 검색 (10-18%) =====
             send_step_start(session_id, "knowledge_search", "## 1-2단계: 지식 검색\n\n관련 지식과 컨텍스트를 검색합니다...", agent_name="orchestrator")
@@ -1345,7 +1348,9 @@ class PrismOrchestrator:
                 rag_search_result = "RAG 도구 사용 불가"
                 print(f"⏭️ [ORCHESTRATE-5] RAG tools not available, skipping", file=sys.stderr, flush=True)
 
-            send_step_complete(session_id, "knowledge_search", f"## 지식 검색 완료\n\n{rag_search_result[:200]}...", progress=18, agent_name="orchestrator")
+            # 지식 검색 결과 WebSocket 전송 (1000자까지)
+            rag_display = rag_search_result if len(rag_search_result) <= 1000 else rag_search_result[:1000] + "\n\n...(상세 내용은 최종 리포트에서 확인 가능)"
+            send_step_complete(session_id, "knowledge_search", f"## 지식 검색 완료\n\n{rag_display}", progress=18, agent_name="orchestrator")
 
             # ===== PROCESS STAGE 1-3: 오케스트레이션 계획 수립 (18-20%) =====
             send_step_start(session_id, "orchestration_planning", "## 1-3단계: 오케스트레이션 계획 수립\n\n검색된 지식을 바탕으로 실행 계획을 수립합니다...", agent_name="orchestrator")
@@ -1383,7 +1388,9 @@ class PrismOrchestrator:
                 await self._save_conversation_to_memory(user_id, prompt, planning_response.text)
 
             # PROCESS STAGE 1-3 완료: 오케스트레이션 계획 수립 완료 (20%)
-            planning_summary = f"## 오케스트레이션 계획 수립 완료\n\n{curr_orch_prog.orchestration_plan[:200]}..."
+            # 오케스트레이션 계획 WebSocket 전송 (1000자까지)
+            planning_display = curr_orch_prog.orchestration_plan if len(curr_orch_prog.orchestration_plan) <= 1000 else curr_orch_prog.orchestration_plan[:1000] + "\n\n...(상세 내용은 최종 리포트에서 확인 가능)"
+            planning_summary = f"## 오케스트레이션 계획 수립 완료\n\n{planning_display}"
             send_step_complete(session_id, "orchestration_planning", planning_summary, progress=20, agent_name="orchestrator")
 
             # ===== SCENARIO MODE vs FREE MODE =====
@@ -1439,7 +1446,9 @@ class PrismOrchestrator:
                 monitoring_agent_query_response = await self.llm.invoke_agent(self._agent, monitoring_agent_query_request)
                 monitoring_query_text = monitoring_agent_query_response.text
                 print(f"🆓 [FREE MODE] 모니터링 쿼리 LLM 생성: {monitoring_query_text[:100]}...", file=sys.stderr, flush=True)
-            send_websocket_update(session_id, step_name="monitoring_query_prep", content=f"## 모니터링 쿼리 준비 완료\n\n{monitoring_query_text[:150]}...", status="completed", progress=28, agent_name="monitoring")
+            # 모니터링 쿼리 전체 내용을 WebSocket으로 전송 (잘림 방지)
+            monitoring_query_display = monitoring_query_text if len(monitoring_query_text) <= 1500 else monitoring_query_text[:1500] + "...\n\n(내용이 길어 일부 생략됨)"
+            send_websocket_update(session_id, step_name="monitoring_query_prep", content=f"## 모니터링 쿼리 준비 완료\n\n```\n{monitoring_query_display}\n```", status="completed", progress=28, agent_name="monitoring")
 
             await self._call_platform_base(
                 orch_progress=curr_orch_prog
@@ -1463,7 +1472,14 @@ class PrismOrchestrator:
                 print(f"🎯 [SCENARIO MODE] 시나리오 모니터링 응답 길이: {len(scenario_monitoring_result)} 문자", file=sys.stderr, flush=True)
 
             curr_orch_prog.monitoring_agent_response = monitoring_agent_response.result
-            send_step_complete(session_id, "monitoring", f"## 모니터링 완료\n\n{str(monitoring_agent_response.result)}", progress=40, agent_name="monitoring")
+
+            # 모니터링 결과 WebSocket 전송 (구조화, 1500자까지)
+            monitoring_result_str = str(monitoring_agent_response.result)
+            if len(monitoring_result_str) <= 1500:
+                monitoring_content = f"## 모니터링 완료\n\n### 실행 결과\n\n{monitoring_result_str}"
+            else:
+                monitoring_content = f"## 모니터링 완료\n\n### 실행 결과\n\n{monitoring_result_str[:1500]}\n\n...(상세 내용은 최종 리포트에서 확인 가능)"
+            send_step_complete(session_id, "monitoring", monitoring_content, progress=40, agent_name="monitoring")
 
             await self._call_platform_base(
                 orch_progress=curr_orch_prog
@@ -1495,7 +1511,7 @@ class PrismOrchestrator:
                 send_websocket_update(session_id, step_name="prediction_query_prep", content="## 예측 쿼리 생성 중\n\n예측 에이전트에 전달할 쿼리를 준비합니다...", status="in_progress", progress=46, agent_name="prediction")
                 if scenario_mode and matched_scenario:
                     # 🎯 SCENARIO MODE: 시나리오에 정의된 쿼리 직접 사용
-                    prediction_query_text = matched_scenario.get("agent_workflow", {}).get("step_3_orchestration_to_prediction", {}).get("request", {}).get("query", prompt)
+                    prediction_query_text = matched_scenario.get("agent_workflow", {}).get("step_4_orchestration_to_prediction", {}).get("request", {}).get("query", prompt)
                     print(f"🎯 [SCENARIO MODE] 예측 쿼리 시나리오에서 사용: {prediction_query_text[:100]}...", file=sys.stderr, flush=True)
                 else:
                     # 🆓 FREE MODE: LLM이 쿼리 생성
@@ -1522,7 +1538,9 @@ class PrismOrchestrator:
                     prediction_agent_query_response = await self.llm.invoke_agent(self._agent, prediction_agent_query_request)
                     prediction_query_text = prediction_agent_query_response.text
                     print(f"🆓 [FREE MODE] 예측 쿼리 LLM 생성: {prediction_query_text[:100]}...", file=sys.stderr, flush=True)
-                send_websocket_update(session_id, step_name="prediction_query_prep", content=f"## 예측 쿼리 준비 완료\n\n{prediction_query_text[:150]}...", status="completed", progress=49, agent_name="prediction")
+                # 예측 쿼리 전체 내용을 WebSocket으로 전송 (잘림 방지)
+                prediction_query_display = prediction_query_text if len(prediction_query_text) <= 1500 else prediction_query_text[:1500] + "...\n\n(내용이 길어 일부 생략됨)"
+                send_websocket_update(session_id, step_name="prediction_query_prep", content=f"## 예측 쿼리 준비 완료\n\n```\n{prediction_query_display}\n```", status="completed", progress=49, agent_name="prediction")
 
                 send_step_start(session_id, "prediction", "## 예측 에이전트 실행 중\n\n미래 시스템 상태를 예측합니다...", agent_name="prediction")
 
@@ -1536,14 +1554,22 @@ class PrismOrchestrator:
                 # 🎯 SCENARIO MODE: 결과를 시나리오 데이터로 교체
                 if scenario_mode and matched_scenario:
                     print(f"🎯 [SCENARIO MODE] 예측 에이전트 응답을 시나리오 데이터로 교체합니다", file=sys.stderr, flush=True)
-                    scenario_prediction_result = matched_scenario.get("agent_workflow", {}).get("step_3_monitoring_to_orchestration", {}).get("request", {}).get("prediction_result", {}).get("summary_report", "")
+                    scenario_prediction_result = matched_scenario.get("agent_workflow", {}).get("step_5_prediction_to_orchestration", {}).get("response", {}).get("result", "")
                     if not scenario_prediction_result:
-                        scenario_prediction_result = matched_scenario.get("agent_workflow", {}).get("step_3_monitoring_to_orchestration", {}).get("request", {}).get("status", "")
+                        # 대체 경로 시도
+                        scenario_prediction_result = matched_scenario.get("agent_workflow", {}).get("step_5_prediction_to_orchestration", {}).get("response", {}).get("summary", "")
                     prediction_agent_response = PredictionAgentResponse(result=scenario_prediction_result)
                     print(f"🎯 [SCENARIO MODE] 시나리오 예측 응답 길이: {len(scenario_prediction_result)} 문자", file=sys.stderr, flush=True)
 
                 curr_orch_prog.prediction_agent_response = prediction_agent_response.result
-                send_step_complete(session_id, "prediction", f"## 예측 완료\n\n{str(prediction_agent_response.result)}", progress=60, agent_name="prediction")
+
+                # 예측 결과 WebSocket 전송 (구조화, 1500자까지)
+                prediction_result_str = str(prediction_agent_response.result)
+                if len(prediction_result_str) <= 1500:
+                    prediction_content = f"## 예측 완료\n\n### 실행 결과\n\n{prediction_result_str}"
+                else:
+                    prediction_content = f"## 예측 완료\n\n### 실행 결과\n\n{prediction_result_str[:1500]}\n\n...(상세 내용은 최종 리포트에서 확인 가능)"
+                send_step_complete(session_id, "prediction", prediction_content, progress=60, agent_name="prediction")
                 await self._call_platform_base(
                     orch_progress=curr_orch_prog
                 )
@@ -1579,7 +1605,7 @@ class PrismOrchestrator:
                 autocontrol_query_text = None
                 if scenario_mode and matched_scenario:
                     # 🎯 SCENARIO MODE: 시나리오에 정의된 쿼리 직접 사용
-                    autocontrol_query_text = matched_scenario.get("agent_workflow", {}).get("step_4_orchestration_to_autocontrol", {}).get("request", {}).get("query", prompt)
+                    autocontrol_query_text = matched_scenario.get("agent_workflow", {}).get("step_6_orchestration_to_autocontrol", {}).get("request", {}).get("query", prompt)
                     print(f"🎯 [SCENARIO MODE] 자율제어 쿼리 시나리오에서 사용: {autocontrol_query_text[:100]}...", file=sys.stderr, flush=True)
                 else:
                     # 🆓 FREE MODE: LLM이 쿼리 생성
@@ -1624,7 +1650,12 @@ class PrismOrchestrator:
                     autocontrol_query_response = await self.llm.invoke_agent(self._agent, autocontrol_query_request)
                     autocontrol_query_text = autocontrol_query_response.text
                     print(f"🆓 [FREE MODE] 자율제어 쿼리 LLM 생성: {autocontrol_query_text[:100]}...", file=sys.stderr, flush=True)
-                send_websocket_update(session_id, step_name="autocontrol_query_prep", content=f"## 자율제어 쿼리 준비 완료\n\n{autocontrol_query_text[:150] if autocontrol_query_text else 'None'}...", status="completed", progress=69, agent_name="autocontrol")
+                # 자율제어 쿼리 전체 내용을 WebSocket으로 전송 (잘림 방지)
+                if autocontrol_query_text:
+                    autocontrol_query_display = autocontrol_query_text if len(autocontrol_query_text) <= 1500 else autocontrol_query_text[:1500] + "...\n\n(내용이 길어 일부 생략됨)"
+                    send_websocket_update(session_id, step_name="autocontrol_query_prep", content=f"## 자율제어 쿼리 준비 완료\n\n```\n{autocontrol_query_display}\n```", status="completed", progress=69, agent_name="autocontrol")
+                else:
+                    send_websocket_update(session_id, step_name="autocontrol_query_prep", content="## 자율제어 쿼리 준비 실패\n\n쿼리 생성에 실패했습니다.", status="error", progress=69, agent_name="autocontrol")
 
                 send_step_start(session_id, "autocontrol", "## 자율제어 에이전트 실행 중\n\n최적 제어 파라미터를 생성합니다...", agent_name="autocontrol")
 
@@ -1638,14 +1669,24 @@ class PrismOrchestrator:
                 # 🎯 SCENARIO MODE: 결과를 시나리오 데이터로 교체
                 if scenario_mode and matched_scenario:
                     print(f"🎯 [SCENARIO MODE] 자율제어 에이전트 응답을 시나리오 데이터로 교체합니다", file=sys.stderr, flush=True)
-                    scenario_autocontrol_result = matched_scenario.get("agent_workflow", {}).get("step_5_orchestration_to_control", {}).get("response", {}).get("result", "")
+                    scenario_autocontrol_result = matched_scenario.get("agent_workflow", {}).get("step_7_autocontrol_to_orchestration", {}).get("response", {}).get("result", "")
+                    if not scenario_autocontrol_result:
+                        # 대체 경로 시도
+                        scenario_autocontrol_result = matched_scenario.get("agent_workflow", {}).get("step_7_autocontrol_to_orchestration", {}).get("response", {}).get("summary", "")
                     if not scenario_autocontrol_result:
                         scenario_autocontrol_result = "자율제어 에이전트 응답 (시나리오 데이터 없음)"
                     autonomous_control_agent_response = AutonomousControlAgentResponse(result=scenario_autocontrol_result)
                     print(f"🎯 [SCENARIO MODE] 시나리오 자율제어 응답 길이: {len(scenario_autocontrol_result)} 문자", file=sys.stderr, flush=True)
 
                 curr_orch_prog.autonomous_control_agent_response = autonomous_control_agent_response.result
-                send_step_complete(session_id, "autocontrol", f"## 자율제어 완료\n\n{str(autonomous_control_agent_response.result)}", progress=75, agent_name="autocontrol")
+
+                # 자율제어 결과 WebSocket 전송 (구조화, 1500자까지)
+                autocontrol_result_str = str(autonomous_control_agent_response.result)
+                if len(autocontrol_result_str) <= 1500:
+                    autocontrol_content = f"## 자율제어 완료\n\n### 실행 결과\n\n{autocontrol_result_str}"
+                else:
+                    autocontrol_content = f"## 자율제어 완료\n\n### 실행 결과\n\n{autocontrol_result_str[:1500]}\n\n...(상세 내용은 최종 리포트에서 확인 가능)"
+                send_step_complete(session_id, "autocontrol", autocontrol_content, progress=75, agent_name="autocontrol")
                 await self._call_platform_base(
                     orch_progress=curr_orch_prog
                 )
@@ -1656,13 +1697,34 @@ class PrismOrchestrator:
                 print(f"⏭️ [ORCHESTRATE-8] AutoControl Agent 호출 건너뜀 (workflow_type={curr_orch_prog.workflow_type})", file=sys.stderr, flush=True)
 
             # PROCESS STAGE 2 완료: 하위 에이전트 실행 완료 (78%)
+            # 각 Agent 결과를 구조화하여 표시 (각 500자 제한)
+            monitoring_summary = "미실행"
+            if curr_orch_prog.monitoring_agent_response:
+                monitoring_str = str(curr_orch_prog.monitoring_agent_response)
+                monitoring_summary = monitoring_str if len(monitoring_str) <= 500 else monitoring_str[:500] + "..."
+
+            prediction_summary = "미실행"
+            if curr_orch_prog.prediction_agent_response:
+                prediction_str = str(curr_orch_prog.prediction_agent_response)
+                prediction_summary = prediction_str if len(prediction_str) <= 500 else prediction_str[:500] + "..."
+
+            autocontrol_summary = "미실행"
+            if curr_orch_prog.autonomous_control_agent_response:
+                autocontrol_str = str(curr_orch_prog.autonomous_control_agent_response)
+                autocontrol_summary = autocontrol_str if len(autocontrol_str) <= 500 else autocontrol_str[:500] + "..."
+
             agent_execution_summary = f"""## 하위 에이전트 실행 완료
 
-**모니터링**: {str(curr_orch_prog.monitoring_agent_response) if curr_orch_prog.monitoring_agent_response else '미실행'}
+### 🔍 모니터링 에이전트
+{monitoring_summary}
 
-**예측**: {str(curr_orch_prog.prediction_agent_response) if curr_orch_prog.prediction_agent_response else '미실행'}
+### 📈 예측 에이전트
+{prediction_summary}
 
-**자율제어**: {str(curr_orch_prog.autonomous_control_agent_response) if curr_orch_prog.autonomous_control_agent_response else '미실행'}"""
+### 🎯 자율제어 에이전트
+{autocontrol_summary}
+
+> 상세 내용은 최종 리포트에서 확인하실 수 있습니다."""
             send_step_complete(session_id, "agent_execution", agent_execution_summary, progress=78, agent_name="orchestrator")
 
             # ===== CONDITIONAL COMPLIANCE CHECK =====
@@ -1742,26 +1804,98 @@ class PrismOrchestrator:
 
             # PROCESS STAGE 3: 규정 준수 검증 완료 (필요시) (85%)
             if should_check_compliance:
-                compliance_summary = f"## 규정 준수 검증 완료\n\n{str(curr_orch_prog.compliance_data)[:200] if curr_orch_prog.compliance_data else '미실행'}..."
+                # Compliance 결과를 상세하게 표시
+                if curr_orch_prog.compliance_data:
+                    compliance_data = curr_orch_prog.compliance_data
+
+                    # compliance_data가 dict인 경우 상세 정보 추출
+                    if isinstance(compliance_data, dict):
+                        compliance_status = compliance_data.get("compliance_status", "알 수 없음")
+                        risk_level = compliance_data.get("risk_level", "알 수 없음")
+                        matched_regulations = compliance_data.get("matched_regulations", [])
+                        evidence = compliance_data.get("evidence", [])
+                        recommendations = compliance_data.get("recommendations", [])
+                        violations = compliance_data.get("violations", [])
+                        warnings = compliance_data.get("warnings", [])
+
+                        compliance_summary = f"""## 규정 준수 검증 완료
+
+### 검증 결과
+- **준수 상태**: {compliance_status}
+- **위험 수준**: {risk_level}
+
+"""
+
+                        if matched_regulations:
+                            compliance_summary += f"""### 관련 규정
+{chr(10).join([f"- {reg}" for reg in matched_regulations[:5]])}
+"""
+
+                        if violations:
+                            compliance_summary += f"""
+### 발견된 위반사항
+{chr(10).join([f"- {v}" for v in violations[:5]])}
+"""
+
+                        if warnings:
+                            compliance_summary += f"""
+### 경고사항
+{chr(10).join([f"- {w}" for w in warnings[:5]])}
+"""
+
+                        if evidence:
+                            compliance_summary += f"""
+### 검증 근거
+{chr(10).join([f"- {e}" for e in evidence[:3]])}
+"""
+
+                        if recommendations:
+                            compliance_summary += f"""
+### 권장사항
+{chr(10).join([f"- {r}" for r in recommendations[:5]])}
+"""
+
+                        # 추가 정보가 있으면 표시
+                        if len(str(compliance_data)) > 2000:
+                            compliance_summary += "\n\n(추가 상세 정보는 최종 리포트에서 확인 가능)"
+                    else:
+                        # dict가 아닌 경우 문자열로 표시 (최대 1000자)
+                        compliance_str = str(compliance_data)
+                        if len(compliance_str) <= 1000:
+                            compliance_summary = f"## 규정 준수 검증 완료\n\n{compliance_str}"
+                        else:
+                            truncated_msg = "...\n\n(내용이 길어 일부 생략됨)"
+                            compliance_summary = f"## 규정 준수 검증 완료\n\n{compliance_str[:1000]}{truncated_msg}"
+                else:
+                    compliance_summary = "## 규정 준수 검증 미실행\n\n이번 작업에서는 규정 준수 검증이 수행되지 않았습니다."
+
                 send_step_complete(session_id, "compliance_check", compliance_summary, progress=85, agent_name="orchestrator")
 
             # ===== PROCESS STAGE 4: 최종 응답 생성 (85-100%) =====
             send_step_start(session_id, "final_response_generation", "## 3단계: 최종 응답 생성\n\n모든 에이전트 결과를 종합하여 최종 응답을 생성합니다...", agent_name="orchestrator")
 
-            # 공통 컨텍스트 준비
+            # 공통 컨텍스트 준비 (중복 방지를 위해 간결하게 구성)
             context_summary = f"""
-            ## 사용자 요청
-            {curr_orch_prog.user_request}
-            ## 오케스트레이션 계획
-            {curr_orch_prog.orchestration_plan}
-            ## 모니터링 에이전트 수행 결과
-            {curr_orch_prog.monitoring_agent_response}
-            ## 예측 에이전트 수행 결과
-            {curr_orch_prog.prediction_agent_response}
-            ## 자율제어 에이전트 수행 결과
-            {curr_orch_prog.autonomous_control_agent_response}
-            ## 안전 규정 준수 검증 결과
-            {curr_orch_prog.compliance_data}
+**사용자 요청**: {curr_orch_prog.user_request}
+
+**워크플로우 타입**: {curr_orch_prog.workflow_type}
+
+**오케스트레이션 계획**:
+{curr_orch_prog.orchestration_plan}
+
+**실행된 에이전트 데이터** (아래 데이터를 바탕으로 보고서 작성. 각 Agent 섹션에서 **한 번만** 사용할 것):
+
+[MONITORING_DATA]
+{curr_orch_prog.monitoring_agent_response if curr_orch_prog.monitoring_agent_response else "미실행"}
+
+[PREDICTION_DATA]
+{curr_orch_prog.prediction_agent_response if curr_orch_prog.prediction_agent_response else "미실행"}
+
+[AUTOCONTROL_DATA]
+{curr_orch_prog.autonomous_control_agent_response if curr_orch_prog.autonomous_control_agent_response else "미실행"}
+
+[COMPLIANCE_DATA]
+{curr_orch_prog.compliance_data if curr_orch_prog.compliance_data else "미실행"}
             """
 
             # 1. final_answer 생성: 간결한 요약 (2-3문장)
@@ -1805,32 +1939,174 @@ class PrismOrchestrator:
 
             print(f"✅ [RESPONSE-1] final_answer 생성 완료 (길이: {len(final_answer_text)} 문자)", file=sys.stderr, flush=True)
 
-            # 2. final_markdown 생성: 상세한 마크다운 리포트
+            # 2. final_markdown 생성: 동적 YAML 기반 구조화된 마크다운 리포트
+            # 실행된 Agent 목록 생성
+            executed_agents = []
+            if curr_orch_prog.monitoring_agent_response:
+                executed_agents.append("모니터링")
+            if curr_orch_prog.prediction_agent_response:
+                executed_agents.append("예측")
+            if curr_orch_prog.autonomous_control_agent_response:
+                executed_agents.append("자율제어")
+            if curr_orch_prog.compliance_data:
+                executed_agents.append("규정준수")
+
             final_markdown_prompt = f"""
-            **중요: 반드시 한국어로 작성하세요. 절대 영어나 다른 언어를 사용하지 마세요.**
+**작업 명세서 (YAML 형식)**
 
-            아래 오케스트레이션 결과를 바탕으로 상세하고 포괄적인 마크다운 형식의 종합 리포트를 작성해주세요.
-            가능한 한 자세하게, 모든 정보를 빠짐없이 포함하여 작성하세요.
+```yaml
+task:
+  type: "comprehensive_report_generation"
+  language: "ko"  # 반드시 한국어
+  format: "markdown"
+  session_info:
+    workflow_type: "{curr_orch_prog.workflow_type}"
+    executed_agents: {executed_agents}
 
-            다음 섹션을 포함하되, 각 섹션을 충분히 상세하게 작성하세요:
-            - 📋 요약 (핵심 내용 요약)
-            - 🔍 상세 분석 결과 (각 에이전트의 분석 결과를 상세히 기술)
-            - 📊 주요 지표 및 데이터 (수치, 그래프, 테이블 등)
-            - 📈 예측 결과 (예측 에이전트가 있는 경우)
-            - 🎯 제어 결과 (자율제어 에이전트가 있는 경우)
-            - ⚠️ 주의사항 및 리스크 (있는 경우)
-            - 💡 권장 조치사항 (구체적이고 실행 가능한 조치)
-            - 📝 규정 준수 검증 결과 (규정 검증이 수행된 경우)
+output_structure:
+  required_sections:
+    - section_id: "session_summary"
+      title: "## 📋 세션 요약"
+      instructions: "중복 없이 이번 세션의 핵심 정보만 간결하게 작성"
+      required_fields:
+        - field: "사용자_요청"
+          description: "사용자가 요청한 내용 1-2문장"
+        - field: "워크플로우_타입"
+          description: "실행된 워크플로우: {curr_orch_prog.workflow_type}"
+        - field: "실행된_에이전트"
+          description: "이번 세션에서 실행된 에이전트 목록: {', '.join(executed_agents)}"
+        - field: "핵심_결론"
+          description: "최종 결론 2-3문장"
 
-            **작성 가이드라인:**
-            - 반드시 한국어로 작성하세요
-            - 모든 데이터와 분석 결과를 빠짐없이 포함하세요
-            - 중간에 내용을 자르지 말고 완전한 리포트를 작성하세요
-            - 전문적이면서도 이해하기 쉽게 작성하세요
-            - 마크다운 서식을 적절히 활용하세요 (헤더, 리스트, 테이블, 코드 블록 등)
+    - section_id: "agent_results"
+      title: "## 🤖 에이전트별 실행 결과"
+      instructions: "실행된 에이전트만 포함하고, 각 Agent 결과를 명확히 구분하여 작성. 중복 금지."
+      dynamic_subsections:
+        - agent_name: "monitoring"
+          condition: "모니터링 에이전트가 실행된 경우"
+          title: "### 🔍 모니터링 에이전트"
+          required_fields:
+            - field: "실행_여부"
+              description: "{'실행됨' if curr_orch_prog.monitoring_agent_response else '미실행'}"
+            - field: "시스템_상태"
+              description: "현재 시스템 상태 요약 (테이블 형식 권장)"
+            - field: "이상치_탐지"
+              description: "탐지된 이상치 및 패턴"
+            - field: "주요_지표"
+              description: "핵심 지표와 수치 (마크다운 테이블)"
 
-            {context_summary}
-            """
+        - agent_name: "prediction"
+          condition: "예측 에이전트가 실행된 경우"
+          title: "### 📈 예측 에이전트"
+          required_fields:
+            - field: "실행_여부"
+              description: "{'실행됨' if curr_orch_prog.prediction_agent_response else '미실행'}"
+            - field: "예측_모델"
+              description: "사용된 예측 모델"
+            - field: "예측_결과"
+              description: "예측된 주요 지표 (마크다운 테이블)"
+            - field: "신뢰도"
+              description: "예측 신뢰도 및 불확실성"
+            - field: "시나리오_분석"
+              description: "최선/기본/최악 시나리오"
+
+        - agent_name: "autocontrol"
+          condition: "자율제어 에이전트가 실행된 경우"
+          title: "### 🎯 자율제어 에이전트"
+          required_fields:
+            - field: "실행_여부"
+              description: "{'실행됨' if curr_orch_prog.autonomous_control_agent_response else '미실행'}"
+            - field: "제어_대상"
+              description: "제어 대상 시스템/파라미터"
+            - field: "권장_파라미터"
+              description: "권장 제어 파라미터 (마크다운 테이블: 파라미터명, 현재값, 권장값, 변경량, 근거)"
+            - field: "최적화_목표"
+              description: "제어 최적화 목표"
+            - field: "적용_계획"
+              description: "권장 파라미터 적용 단계 및 주의사항"
+
+        - agent_name: "compliance"
+          condition: "규정준수 에이전트가 실행된 경우"
+          title: "### 📝 규정준수 검증 에이전트"
+          required_fields:
+            - field: "실행_여부"
+              description: "{'실행됨' if curr_orch_prog.compliance_data else '미실행'}"
+            - field: "준수_상태"
+              description: "전체 규정 준수 상태"
+            - field: "관련_규정"
+              description: "적용된 규정 목록"
+            - field: "검증_결과"
+              description: "각 규정별 검증 결과 (테이블 형식)"
+            - field: "개선_요구사항"
+              description: "발견된 문제점 및 개선사항"
+
+    - section_id: "risks_and_recommendations"
+      title: "## ⚠️ 리스크 및 권장사항"
+      instructions: "실행된 에이전트 결과를 종합하여 작성. Agent별 결과에서 이미 언급한 내용을 반복하지 말 것."
+      required_fields:
+        - field: "식별된_리스크"
+          description: "모든 Agent 결과를 종합한 주요 리스크 (우선순위순, 최대 5개)"
+        - field: "즉시_조치_사항"
+          description: "즉시 수행해야 할 조치 (최대 3개)"
+        - field: "단기_조치_사항"
+          description: "24-48시간 내 수행할 조치 (최대 3개)"
+        - field: "중장기_계획"
+          description: "일주일 이상 기간의 개선 계획"
+
+formatting_rules:
+  - rule: "각 섹션 시작 시 빈 줄 2개"
+  - rule: "Agent별 subsection은 ###로 시작"
+  - rule: "테이블 형식 적극 활용 (지표, 파라미터, 규정 등)"
+  - rule: "중요 정보는 **볼드** 처리"
+  - rule: "경고사항은 > 인용 블록 사용"
+  - rule: "수치는 반드시 단위 포함"
+  - rule: "리스트는 우선순위 번호 (1., 2., 3.) 사용"
+
+anti_duplication_rules:
+  - rule: "Agent별 실행 결과는 각 Agent subsection에만 작성"
+  - rule: "세션 요약은 핵심만 2-3문장으로 간결하게"
+  - rule: "리스크 및 권장사항은 Agent 결과를 종합하여 새롭게 작성 (복사 금지)"
+  - rule: "실행되지 않은 Agent는 아예 섹션을 생성하지 말 것"
+  - rule: "같은 내용을 다른 표현으로 반복하지 말 것"
+
+quality_requirements:
+  - requirement: "반드시 한국어로 작성"
+  - requirement: "Agent별 결과를 명확히 구분"
+  - requirement: "실행된 Agent만 포함 (미실행 Agent 섹션 생성 금지)"
+  - requirement: "중복 내용 절대 금지"
+  - requirement: "수치와 데이터는 테이블 형식으로 구조화"
+  - requirement: "전문적이면서 간결하게"
+```
+
+**입력 데이터:**
+{context_summary}
+
+**중요 지시사항 (반드시 준수):**
+
+1. **실행된 Agent만 포함**: {', '.join(executed_agents)}
+
+2. **데이터 사용 규칙**:
+   - [MONITORING_DATA]는 "### 🔍 모니터링 에이전트" 섹션에서만 사용
+   - [PREDICTION_DATA]는 "### 📈 예측 에이전트" 섹션에서만 사용
+   - [AUTOCONTROL_DATA]는 "### 🎯 자율제어 에이전트" 섹션에서만 사용
+   - [COMPLIANCE_DATA]는 "### 📝 규정준수 검증 에이전트" 섹션에서만 사용
+
+3. **중복 절대 금지**:
+   - 각 Agent 데이터는 해당 Agent 섹션에서 **딱 한 번만** 사용
+   - 세션 요약에서 Agent 결과 상세 내용 언급 금지 (핵심만 2-3문장)
+   - 리스크 및 권장사항은 Agent 결과를 **종합/분석**하여 새롭게 작성 (원문 복사 금지)
+
+4. **미실행 Agent 처리**:
+   - 실행되지 않은 Agent는 섹션을 아예 생성하지 말 것
+   - "미실행" 데이터는 무시하고 해당 섹션을 건너뛸 것
+
+5. **구조 준수**:
+   - Agent별 섹션은 ###로 시작
+   - 테이블 형식으로 데이터 구조화
+   - 각 섹션 사이 빈 줄 2개
+
+반드시 한국어로 작성하세요.
+"""
 
             final_markdown_request = AgentInvokeRequest(
                 prompt=final_markdown_prompt,
