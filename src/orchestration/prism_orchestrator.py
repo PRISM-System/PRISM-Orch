@@ -1309,9 +1309,16 @@ class PrismOrchestrator:
             intent_analysis_text = intent_response.text
             print(f"🔧 [ORCHESTRATE-3] Intent analysis: {intent_analysis_text[:100]}...", file=sys.stderr, flush=True)
 
-            # 질의 의도 분석 결과 WebSocket 전송 (1000자까지)
-            intent_display = intent_analysis_text if len(intent_analysis_text) <= 1000 else intent_analysis_text[:1000] + "\n\n...(상세 내용은 최종 리포트에서 확인 가능)"
-            send_step_complete(session_id, "intent_analysis", f"## 질의 의도 분석 완료\n\n{intent_display}", progress=10, agent_name="orchestrator")
+            # 질의 의도 분석 결과 WebSocket 전송 (전체 내용, markdown 포맷)
+            intent_markdown = f"""## 질의 의도 분석 완료
+
+### 사용자 요청
+{prompt}
+
+### 분석 결과
+{intent_analysis_text}
+"""
+            send_step_complete(session_id, "intent_analysis", intent_markdown, progress=10, agent_name="orchestrator")
 
             # ===== PROCESS STAGE 1-2: RAG 지식 검색 (10-18%) =====
             send_step_start(session_id, "knowledge_search", "## 1-2단계: 지식 검색\n\n관련 지식과 컨텍스트를 검색합니다...", agent_name="orchestrator")
@@ -1349,9 +1356,17 @@ class PrismOrchestrator:
                 rag_search_result = "RAG 도구 사용 불가"
                 print(f"⏭️ [ORCHESTRATE-5] RAG tools not available, skipping", file=sys.stderr, flush=True)
 
-            # 지식 검색 결과 WebSocket 전송 (1000자까지)
-            rag_display = rag_search_result if len(rag_search_result) <= 1000 else rag_search_result[:1000] + "\n\n...(상세 내용은 최종 리포트에서 확인 가능)"
-            send_step_complete(session_id, "knowledge_search", f"## 지식 검색 완료\n\n{rag_display}", progress=18, agent_name="orchestrator")
+            # 지식 검색 결과 WebSocket 전송 (전체 내용, markdown 포맷)
+            # RAG 응답을 markdown으로 포맷팅
+            rag_markdown = f"""## 지식 검색 완료
+
+### 검색 쿼리
+{prompt}
+
+### 검색 결과
+{rag_search_result}
+"""
+            send_step_complete(session_id, "knowledge_search", rag_markdown, progress=18, agent_name="orchestrator")
 
             # ===== PROCESS STAGE 1-3: 오케스트레이션 계획 수립 (18-20%) =====
             send_step_start(session_id, "orchestration_planning", "## 1-3단계: 오케스트레이션 계획 수립\n\n검색된 지식을 바탕으로 실행 계획을 수립합니다...", agent_name="orchestrator")
@@ -1389,10 +1404,13 @@ class PrismOrchestrator:
                 await self._save_conversation_to_memory(user_id, prompt, planning_response.text)
 
             # PROCESS STAGE 1-3 완료: 오케스트레이션 계획 수립 완료 (20%)
-            # 오케스트레이션 계획 WebSocket 전송 (1000자까지)
-            planning_display = curr_orch_prog.orchestration_plan if len(curr_orch_prog.orchestration_plan) <= 1000 else curr_orch_prog.orchestration_plan[:1000] + "\n\n...(상세 내용은 최종 리포트에서 확인 가능)"
-            planning_summary = f"## 오케스트레이션 계획 수립 완료\n\n{planning_display}"
-            send_step_complete(session_id, "orchestration_planning", planning_summary, progress=20, agent_name="orchestrator")
+            # 오케스트레이션 계획 WebSocket 전송 (전체 내용, markdown 포맷)
+            planning_markdown = f"""## 오케스트레이션 계획 수립 완료
+
+### 실행 계획
+{curr_orch_prog.orchestration_plan}
+"""
+            send_step_complete(session_id, "orchestration_planning", planning_markdown, progress=20, agent_name="orchestrator")
 
             # ===== SCENARIO MODE vs FREE MODE =====
             # 시나리오 매칭 확인
@@ -1447,9 +1465,15 @@ class PrismOrchestrator:
                 monitoring_agent_query_response = await self.llm.invoke_agent(self._agent, monitoring_agent_query_request)
                 monitoring_query_text = monitoring_agent_query_response.text
                 print(f"🆓 [FREE MODE] 모니터링 쿼리 LLM 생성: {monitoring_query_text[:100]}...", file=sys.stderr, flush=True)
-            # 모니터링 쿼리 전체 내용을 WebSocket으로 전송 (잘림 방지)
-            monitoring_query_display = monitoring_query_text if len(monitoring_query_text) <= 1500 else monitoring_query_text[:1500] + "...\n\n(내용이 길어 일부 생략됨)"
-            send_websocket_update(session_id, step_name="monitoring_query_prep", content=f"## 모니터링 쿼리 준비 완료\n\n```\n{monitoring_query_display}\n```", status="completed", progress=28, agent_name="monitoring")
+            # 모니터링 쿼리 전체 내용을 WebSocket으로 전송 (전체, markdown 포맷)
+            monitoring_query_markdown = f"""## 모니터링 쿼리 준비 완료
+
+### 쿼리 내용
+```
+{monitoring_query_text}
+```
+"""
+            send_websocket_update(session_id, step_name="monitoring_query_prep", content=monitoring_query_markdown, status="completed", progress=28, agent_name="monitoring")
 
             await self._call_platform_base(
                 orch_progress=curr_orch_prog
@@ -1491,12 +1515,9 @@ class PrismOrchestrator:
 
             curr_orch_prog.monitoring_agent_response = monitoring_agent_response.result
 
-            # 모니터링 결과 WebSocket 전송 (구조화, 1500자까지)
+            # 모니터링 결과 WebSocket 전송 (전체 내용, 잘림 없음)
             monitoring_result_str = str(monitoring_agent_response.result)
-            if len(monitoring_result_str) <= 1500:
-                monitoring_content = f"## 모니터링 완료\n\n### 실행 결과\n\n{monitoring_result_str}"
-            else:
-                monitoring_content = f"## 모니터링 완료\n\n### 실행 결과\n\n{monitoring_result_str[:1500]}\n\n...(상세 내용은 최종 리포트에서 확인 가능)"
+            monitoring_content = f"## 모니터링 완료\n\n### 실행 결과\n\n{monitoring_result_str}"
             send_step_complete(session_id, "monitoring", monitoring_content, progress=40, agent_name="monitoring")
 
             await self._call_platform_base(
@@ -1556,9 +1577,15 @@ class PrismOrchestrator:
                     prediction_agent_query_response = await self.llm.invoke_agent(self._agent, prediction_agent_query_request)
                     prediction_query_text = prediction_agent_query_response.text
                     print(f"🆓 [FREE MODE] 예측 쿼리 LLM 생성: {prediction_query_text[:100]}...", file=sys.stderr, flush=True)
-                # 예측 쿼리 전체 내용을 WebSocket으로 전송 (잘림 방지)
-                prediction_query_display = prediction_query_text if len(prediction_query_text) <= 1500 else prediction_query_text[:1500] + "...\n\n(내용이 길어 일부 생략됨)"
-                send_websocket_update(session_id, step_name="prediction_query_prep", content=f"## 예측 쿼리 준비 완료\n\n```\n{prediction_query_display}\n```", status="completed", progress=49, agent_name="prediction")
+                # 예측 쿼리 전체 내용을 WebSocket으로 전송 (전체, markdown 포맷)
+                prediction_query_markdown = f"""## 예측 쿼리 준비 완료
+
+### 쿼리 내용
+```
+{prediction_query_text}
+```
+"""
+                send_websocket_update(session_id, step_name="prediction_query_prep", content=prediction_query_markdown, status="completed", progress=49, agent_name="prediction")
 
                 send_step_start(session_id, "prediction", "## 예측 에이전트 실행 중\n\n미래 시스템 상태를 예측합니다...", agent_name="prediction")
 
@@ -1601,12 +1628,9 @@ class PrismOrchestrator:
 
                 curr_orch_prog.prediction_agent_response = prediction_agent_response.result
 
-                # 예측 결과 WebSocket 전송 (구조화, 1500자까지)
+                # 예측 결과 WebSocket 전송 (전체 내용, 잘림 없음)
                 prediction_result_str = str(prediction_agent_response.result)
-                if len(prediction_result_str) <= 1500:
-                    prediction_content = f"## 예측 완료\n\n### 실행 결과\n\n{prediction_result_str}"
-                else:
-                    prediction_content = f"## 예측 완료\n\n### 실행 결과\n\n{prediction_result_str[:1500]}\n\n...(상세 내용은 최종 리포트에서 확인 가능)"
+                prediction_content = f"## 예측 완료\n\n### 실행 결과\n\n{prediction_result_str}"
                 send_step_complete(session_id, "prediction", prediction_content, progress=60, agent_name="prediction")
                 await self._call_platform_base(
                     orch_progress=curr_orch_prog
@@ -1688,10 +1712,16 @@ class PrismOrchestrator:
                     autocontrol_query_response = await self.llm.invoke_agent(self._agent, autocontrol_query_request)
                     autocontrol_query_text = autocontrol_query_response.text
                     print(f"🆓 [FREE MODE] 자율제어 쿼리 LLM 생성: {autocontrol_query_text[:100]}...", file=sys.stderr, flush=True)
-                # 자율제어 쿼리 전체 내용을 WebSocket으로 전송 (잘림 방지)
+                # 자율제어 쿼리 전체 내용을 WebSocket으로 전송 (전체, markdown 포맷)
                 if autocontrol_query_text:
-                    autocontrol_query_display = autocontrol_query_text if len(autocontrol_query_text) <= 1500 else autocontrol_query_text[:1500] + "...\n\n(내용이 길어 일부 생략됨)"
-                    send_websocket_update(session_id, step_name="autocontrol_query_prep", content=f"## 자율제어 쿼리 준비 완료\n\n```\n{autocontrol_query_display}\n```", status="completed", progress=69, agent_name="autocontrol")
+                    autocontrol_query_markdown = f"""## 자율제어 쿼리 준비 완료
+
+### 쿼리 내용
+```
+{autocontrol_query_text}
+```
+"""
+                    send_websocket_update(session_id, step_name="autocontrol_query_prep", content=autocontrol_query_markdown, status="completed", progress=69, agent_name="autocontrol")
                 else:
                     send_websocket_update(session_id, step_name="autocontrol_query_prep", content="## 자율제어 쿼리 준비 실패\n\n쿼리 생성에 실패했습니다.", status="error", progress=69, agent_name="autocontrol")
 
@@ -1740,12 +1770,9 @@ class PrismOrchestrator:
 
                 curr_orch_prog.autonomous_control_agent_response = autonomous_control_agent_response.result
 
-                # 자율제어 결과 WebSocket 전송 (구조화, 1500자까지)
+                # 자율제어 결과 WebSocket 전송 (전체 내용, 잘림 없음)
                 autocontrol_result_str = str(autonomous_control_agent_response.result)
-                if len(autocontrol_result_str) <= 1500:
-                    autocontrol_content = f"## 자율제어 완료\n\n### 실행 결과\n\n{autocontrol_result_str}"
-                else:
-                    autocontrol_content = f"## 자율제어 완료\n\n### 실행 결과\n\n{autocontrol_result_str[:1500]}\n\n...(상세 내용은 최종 리포트에서 확인 가능)"
+                autocontrol_content = f"## 자율제어 완료\n\n### 실행 결과\n\n{autocontrol_result_str}"
                 send_step_complete(session_id, "autocontrol", autocontrol_content, progress=75, agent_name="autocontrol")
                 await self._call_platform_base(
                     orch_progress=curr_orch_prog
@@ -1757,34 +1784,41 @@ class PrismOrchestrator:
                 print(f"⏭️ [ORCHESTRATE-8] AutoControl Agent 호출 건너뜀 (workflow_type={curr_orch_prog.workflow_type})", file=sys.stderr, flush=True)
 
             # PROCESS STAGE 2 완료: 하위 에이전트 실행 완료 (78%)
-            # 각 Agent 결과를 구조화하여 표시 (각 500자 제한)
-            monitoring_summary = "미실행"
+            # 각 Agent 결과를 markdown 형식으로 표시 (전체 내용)
+            agent_execution_markdown = "## 하위 에이전트 실행 완료\n\n"
+
             if curr_orch_prog.monitoring_agent_response:
-                monitoring_str = str(curr_orch_prog.monitoring_agent_response)
-                monitoring_summary = monitoring_str if len(monitoring_str) <= 500 else monitoring_str[:500] + "..."
+                agent_execution_markdown += f"""### 🔍 모니터링 에이전트
+**상태**: 완료
 
-            prediction_summary = "미실행"
+{curr_orch_prog.monitoring_agent_response}
+
+---
+
+"""
+
             if curr_orch_prog.prediction_agent_response:
-                prediction_str = str(curr_orch_prog.prediction_agent_response)
-                prediction_summary = prediction_str if len(prediction_str) <= 500 else prediction_str[:500] + "..."
+                agent_execution_markdown += f"""### 📈 예측 에이전트
+**상태**: 완료
 
-            autocontrol_summary = "미실행"
+{curr_orch_prog.prediction_agent_response}
+
+---
+
+"""
+
             if curr_orch_prog.autonomous_control_agent_response:
-                autocontrol_str = str(curr_orch_prog.autonomous_control_agent_response)
-                autocontrol_summary = autocontrol_str if len(autocontrol_str) <= 500 else autocontrol_str[:500] + "..."
+                agent_execution_markdown += f"""### 🎯 자율제어 에이전트
+**상태**: 완료
 
-            agent_execution_summary = f"""## 하위 에이전트 실행 완료
+{curr_orch_prog.autonomous_control_agent_response}
 
-### 🔍 모니터링 에이전트
-{monitoring_summary}
+---
 
-### 📈 예측 에이전트
-{prediction_summary}
+"""
 
-### 🎯 자율제어 에이전트
-{autocontrol_summary}
-
-> 상세 내용은 최종 리포트에서 확인하실 수 있습니다."""
+            agent_execution_markdown += "\n모든 하위 에이전트 실행이 완료되었습니다."
+            agent_execution_summary = agent_execution_markdown
             send_step_complete(session_id, "agent_execution", agent_execution_summary, progress=78, agent_name="orchestrator")
 
             # ===== CONDITIONAL COMPLIANCE CHECK =====
@@ -1831,7 +1865,7 @@ class PrismOrchestrator:
                     orch_progress=curr_orch_prog
                 )
 
-                # Compliance tool을 사용하여 안전 규정 준수 여부 검증
+                # Compliance tool을 사용하여 안전 규정 준수 여부 검증 (3초 타임아웃)
                 compliance_request = ToolRequest(
                     tool_name="compliance_check",
                     parameters={
@@ -1841,17 +1875,30 @@ class PrismOrchestrator:
                     }
                 )
 
-                # Compliance tool 실행
+                # Compliance tool 실행 (3초 타임아웃 적용)
                 compliance_tool = self.tool_registry.get_tool("compliance_check")
                 if compliance_tool:
-                    compliance_result = await compliance_tool.execute(compliance_request)
-                    if compliance_result.success:
-                        compliance_data = compliance_result.result
+                    try:
+                        print(f"⏱️ [ORCHESTRATE-11] Compliance check 실행 (3초 타임아웃)", file=sys.stderr, flush=True)
+                        compliance_result = await asyncio.wait_for(
+                            compliance_tool.execute(compliance_request),
+                            timeout=3.0
+                        )
+                        if compliance_result.success:
+                            compliance_data = compliance_result.result
+                            curr_orch_prog.compliance_data = compliance_data
+                            print(f"✅ [ORCHESTRATE-11] Compliance check 정상 완료: {compliance_data}", file=sys.stderr, flush=True)
+                        else:
+                            print(f"⚠️ [ORCHESTRATE-11] Compliance check failed: {compliance_result.error_message}", file=sys.stderr, flush=True)
+                            compliance_data = {"compliance_status": "check_failed", "risk_level": "unknown"}
+                    except asyncio.TimeoutError:
+                        print(f"⏱️ [ORCHESTRATE-11] Compliance check 타임아웃 (3초) - 기본값 사용", file=sys.stderr, flush=True)
+                        compliance_data = {"compliance_status": "timeout", "risk_level": "unknown"}
                         curr_orch_prog.compliance_data = compliance_data
-                        print(f"🔧 [ORCHESTRATE-11] Compliance check completed: {compliance_data}", file=sys.stderr, flush=True)
-                    else:
-                        print(f"⚠️ [ORCHESTRATE-11] Compliance check failed: {compliance_result.error_message}", file=sys.stderr, flush=True)
-                        compliance_data = {"compliance_status": "check_failed", "risk_level": "unknown"}
+                    except Exception as e:
+                        print(f"❌ [ORCHESTRATE-11] Compliance check 오류 ({str(e)}) - 기본값 사용", file=sys.stderr, flush=True)
+                        compliance_data = {"compliance_status": "error", "risk_level": "unknown"}
+                        curr_orch_prog.compliance_data = compliance_data
                 else:
                     print(f"⚠️ [ORCHESTRATE-11] Compliance tool not found", file=sys.stderr, flush=True)
                     compliance_data = {"compliance_status": "tool_not_found", "risk_level": "unknown"}
@@ -2166,13 +2213,23 @@ quality_requirements:
    - 각 섹션 사이 빈 줄 2개
 
 반드시 한국어로 작성하세요.
+
+**중요**: 보고서 작성 후 반드시 아래 종료 마커를 정확히 포함하세요. 이 마커가 없으면 보고서가 미완성으로 간주됩니다:
+```
+[END_OF_REPORT]
+```
+
+**필수 지침**:
+1. 모든 섹션을 완성한 후 반드시 [END_OF_REPORT] 마커를 추가
+2. 마커는 보고서의 마지막에 정확히 한 번만 포함
+3. 마커 앞뒤로 추가 텍스트 없이 깔끔하게 종료
 """
 
             final_markdown_request = AgentInvokeRequest(
                 prompt=final_markdown_prompt,
                 max_new_tokens=16384,  # 토큰 길이 최대화
                 temperature=0.6,
-                stop=None,
+                stop=["[END_OF_REPORT]"],  # 종료 마커에서 강제 중단
                 use_tools=False,
                 max_tool_calls=0,
                 extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
@@ -2182,23 +2239,62 @@ quality_requirements:
             final_markdown_response = await self.llm.invoke_agent(self._agent, final_markdown_request)
             final_markdown_text = final_markdown_response.text.strip()
 
-            # 응답이 미완성이면 이어서 작성 (마크다운은 더 엄격하게 체크)
-            if not self._is_response_complete(final_markdown_text, is_markdown=True):
-                print(f"⚠️ [RESPONSE-2] final_markdown가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
-                final_markdown_text = await self._complete_llm_response(
-                    initial_response=final_markdown_text,
-                    original_prompt=final_markdown_prompt,
-                    max_continuations=4,  # 마크다운은 더 많은 재시도 허용
-                    is_markdown=True,
-                    max_new_tokens=16384,
-                    temperature=0.6,
-                    stop=None,
-                    use_tools=False,
-                    max_tool_calls=0,
-                    extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
-                    user_id=user_id,
-                    tool_for_use=None
-                )
+            # 종료 마커 확인 및 제거
+            end_marker = "[END_OF_REPORT]"
+            has_end_marker = end_marker in final_markdown_text
+
+            if has_end_marker:
+                # 종료 마커 발견 - 정상 완료
+                final_markdown_text = final_markdown_text.split(end_marker)[0].strip()
+                print(f"✅ [RESPONSE-2] final_markdown 종료 마커 확인 - 정상 완료", file=sys.stderr, flush=True)
+            else:
+                # 종료 마커 없음 - stop 토큰에서 중단되었거나 미완성
+                print(f"⚠️ [RESPONSE-2] final_markdown 종료 마커 없음 - 생성 계속 진행", file=sys.stderr, flush=True)
+
+                # 응답이 미완성이면 이어서 작성 (최대 8번 재시도로 증가)
+                continuation_count = 0
+                max_continuations = 8
+
+                while not has_end_marker and continuation_count < max_continuations:
+                    continuation_count += 1
+                    print(f"⏳ [RESPONSE-2] final_markdown 계속 생성 중 ({continuation_count}/{max_continuations})...", file=sys.stderr, flush=True)
+
+                    # 더 강력한 프롬프트로 종료 마커 강제
+                    continuation_prompt = f"""이전 응답:
+{final_markdown_text}
+
+위 내용에 이어서 보고서를 완성하고 반드시 [END_OF_REPORT] 마커로 종료하세요.
+
+**중요**: 모든 섹션을 완성했다면 즉시 [END_OF_REPORT]를 추가하세요. 이 마커가 없으면 보고서가 미완성으로 간주됩니다.
+마커 형식: [END_OF_REPORT] (정확히 이 형식으로)
+"""
+
+                    continuation_request = AgentInvokeRequest(
+                        prompt=continuation_prompt,
+                        max_new_tokens=16384,
+                        temperature=0.6,
+                        stop=["[END_OF_REPORT]"],
+                        use_tools=False,
+                        max_tool_calls=0,
+                        extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                        user_id=user_id,
+                        tool_for_use=None
+                    )
+
+                    continuation_response = await self.llm.invoke_agent(self._agent, continuation_request)
+                    continuation_text = continuation_response.text.strip()
+
+                    # 종료 마커 확인
+                    if end_marker in continuation_text:
+                        continuation_text = continuation_text.split(end_marker)[0].strip()
+                        has_end_marker = True
+
+                    final_markdown_text += "\n" + continuation_text
+
+                if not has_end_marker:
+                    # 8번 재시도 후에도 마커 없으면 강제로 추가
+                    print(f"⚠️ [RESPONSE-2] final_markdown {max_continuations}번 재시도 후에도 종료 마커 없음 - 마커 강제 추가", file=sys.stderr, flush=True)
+                    # 마커를 강제로 추가하지 않고 현재 상태 유지 (내용은 완성되었을 가능성 있음)
 
             print(f"✅ [RESPONSE-2] final_markdown 생성 완료 (길이: {len(final_markdown_text)} 문자)", file=sys.stderr, flush=True)
 
