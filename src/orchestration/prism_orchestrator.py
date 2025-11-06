@@ -10,6 +10,7 @@ import json
 import requests
 import yaml
 import os
+import asyncio
 from collections import deque
 
 from prism_core.core.llm.prism_llm_service import PrismLLMService
@@ -1457,19 +1458,36 @@ class PrismOrchestrator:
             # call monitoring agent
             send_step_start(session_id, "monitoring", "## 모니터링 에이전트 실행 중\n\n시스템 상태를 모니터링하고 이상치를 탐지합니다...", agent_name="monitoring")
 
-            # 실제 에이전트 호출 (matched_scenario 전달)
-            monitoring_agent_response = await self._call_monitoring_agent(
-                session_id=session_id,
-                request_text=monitoring_query_text,
-                matched_scenario=matched_scenario
-            )
-
-            # 🎯 SCENARIO MODE: 결과를 시나리오 데이터로 교체
+            # 🎯 SCENARIO MODE: 타임아웃 적용 (3초) + 에러 시 시나리오 데이터로 대체
             if scenario_mode and matched_scenario:
-                print(f"🎯 [SCENARIO MODE] 모니터링 에이전트 응답을 시나리오 데이터로 교체합니다", file=sys.stderr, flush=True)
-                scenario_monitoring_result = matched_scenario.get("agent_workflow", {}).get("step_3_monitoring_to_orchestration", {}).get("response", {}).get("result", "")
-                monitoring_agent_response = MonitoringAgentResponse(result=scenario_monitoring_result)
-                print(f"🎯 [SCENARIO MODE] 시나리오 모니터링 응답 길이: {len(scenario_monitoring_result)} 문자", file=sys.stderr, flush=True)
+                try:
+                    print(f"⏱️ [SCENARIO MODE] 모니터링 에이전트 호출 (3초 타임아웃)", file=sys.stderr, flush=True)
+                    monitoring_agent_response = await asyncio.wait_for(
+                        self._call_monitoring_agent(
+                            session_id=session_id,
+                            request_text=monitoring_query_text,
+                            matched_scenario=matched_scenario
+                        ),
+                        timeout=3.0
+                    )
+                    print(f"✅ [SCENARIO MODE] 모니터링 에이전트 정상 응답", file=sys.stderr, flush=True)
+                except asyncio.TimeoutError:
+                    print(f"⏱️ [SCENARIO MODE] 모니터링 에이전트 타임아웃 (3초) - 시나리오 데이터로 대체", file=sys.stderr, flush=True)
+                    scenario_monitoring_result = matched_scenario.get("agent_workflow", {}).get("step_3_monitoring_to_orchestration", {}).get("response", {}).get("result", "")
+                    monitoring_agent_response = MonitoringAgentResponse(result=scenario_monitoring_result)
+                    print(f"🎯 [SCENARIO MODE] 시나리오 모니터링 응답 길이: {len(scenario_monitoring_result)} 문자", file=sys.stderr, flush=True)
+                except Exception as e:
+                    print(f"❌ [SCENARIO MODE] 모니터링 에이전트 오류 ({str(e)}) - 시나리오 데이터로 대체", file=sys.stderr, flush=True)
+                    scenario_monitoring_result = matched_scenario.get("agent_workflow", {}).get("step_3_monitoring_to_orchestration", {}).get("response", {}).get("result", "")
+                    monitoring_agent_response = MonitoringAgentResponse(result=scenario_monitoring_result)
+                    print(f"🎯 [SCENARIO MODE] 시나리오 모니터링 응답 길이: {len(scenario_monitoring_result)} 문자", file=sys.stderr, flush=True)
+            else:
+                # 🆓 FREE MODE: 타임아웃 없이 실행
+                monitoring_agent_response = await self._call_monitoring_agent(
+                    session_id=session_id,
+                    request_text=monitoring_query_text,
+                    matched_scenario=matched_scenario
+                )
 
             curr_orch_prog.monitoring_agent_response = monitoring_agent_response.result
 
@@ -1544,22 +1562,42 @@ class PrismOrchestrator:
 
                 send_step_start(session_id, "prediction", "## 예측 에이전트 실행 중\n\n미래 시스템 상태를 예측합니다...", agent_name="prediction")
 
-                # 실제 에이전트 호출 (matched_scenario 전달)
-                prediction_agent_response = await self._call_prediction_agent(
-                    session_id=session_id,
-                    request_text=prediction_query_text,
-                    matched_scenario=matched_scenario
-                )
-
-                # 🎯 SCENARIO MODE: 결과를 시나리오 데이터로 교체
+                # 🎯 SCENARIO MODE: 타임아웃 적용 (3초) + 에러 시 시나리오 데이터로 대체
                 if scenario_mode and matched_scenario:
-                    print(f"🎯 [SCENARIO MODE] 예측 에이전트 응답을 시나리오 데이터로 교체합니다", file=sys.stderr, flush=True)
-                    scenario_prediction_result = matched_scenario.get("agent_workflow", {}).get("step_5_prediction_to_orchestration", {}).get("response", {}).get("result", "")
-                    if not scenario_prediction_result:
-                        # 대체 경로 시도
-                        scenario_prediction_result = matched_scenario.get("agent_workflow", {}).get("step_5_prediction_to_orchestration", {}).get("response", {}).get("summary", "")
-                    prediction_agent_response = PredictionAgentResponse(result=scenario_prediction_result)
-                    print(f"🎯 [SCENARIO MODE] 시나리오 예측 응답 길이: {len(scenario_prediction_result)} 문자", file=sys.stderr, flush=True)
+                    try:
+                        print(f"⏱️ [SCENARIO MODE] 예측 에이전트 호출 (3초 타임아웃)", file=sys.stderr, flush=True)
+                        prediction_agent_response = await asyncio.wait_for(
+                            self._call_prediction_agent(
+                                session_id=session_id,
+                                request_text=prediction_query_text,
+                                matched_scenario=matched_scenario
+                            ),
+                            timeout=3.0
+                        )
+                        print(f"✅ [SCENARIO MODE] 예측 에이전트 정상 응답", file=sys.stderr, flush=True)
+                    except asyncio.TimeoutError:
+                        print(f"⏱️ [SCENARIO MODE] 예측 에이전트 타임아웃 (3초) - 시나리오 데이터로 대체", file=sys.stderr, flush=True)
+                        scenario_prediction_result = matched_scenario.get("agent_workflow", {}).get("step_5_prediction_to_orchestration", {}).get("response", {}).get("result", "")
+                        if not scenario_prediction_result:
+                            # 대체 경로 시도
+                            scenario_prediction_result = matched_scenario.get("agent_workflow", {}).get("step_5_prediction_to_orchestration", {}).get("response", {}).get("summary", "")
+                        prediction_agent_response = PredictionAgentResponse(result=scenario_prediction_result)
+                        print(f"🎯 [SCENARIO MODE] 시나리오 예측 응답 길이: {len(scenario_prediction_result)} 문자", file=sys.stderr, flush=True)
+                    except Exception as e:
+                        print(f"❌ [SCENARIO MODE] 예측 에이전트 오류 ({str(e)}) - 시나리오 데이터로 대체", file=sys.stderr, flush=True)
+                        scenario_prediction_result = matched_scenario.get("agent_workflow", {}).get("step_5_prediction_to_orchestration", {}).get("response", {}).get("result", "")
+                        if not scenario_prediction_result:
+                            # 대체 경로 시도
+                            scenario_prediction_result = matched_scenario.get("agent_workflow", {}).get("step_5_prediction_to_orchestration", {}).get("response", {}).get("summary", "")
+                        prediction_agent_response = PredictionAgentResponse(result=scenario_prediction_result)
+                        print(f"🎯 [SCENARIO MODE] 시나리오 예측 응답 길이: {len(scenario_prediction_result)} 문자", file=sys.stderr, flush=True)
+                else:
+                    # 🆓 FREE MODE: 타임아웃 없이 실행
+                    prediction_agent_response = await self._call_prediction_agent(
+                        session_id=session_id,
+                        request_text=prediction_query_text,
+                        matched_scenario=matched_scenario
+                    )
 
                 curr_orch_prog.prediction_agent_response = prediction_agent_response.result
 
@@ -1659,24 +1697,46 @@ class PrismOrchestrator:
 
                 send_step_start(session_id, "autocontrol", "## 자율제어 에이전트 실행 중\n\n최적 제어 파라미터를 생성합니다...", agent_name="autocontrol")
 
-                # 실제 에이전트 호출 (matched_scenario 전달)
-                autonomous_control_agent_response = await self._call_autonomous_control_agent(
-                    session_id=session_id,
-                    request_text=autocontrol_query_text,
-                    matched_scenario=matched_scenario
-                )
-
-                # 🎯 SCENARIO MODE: 결과를 시나리오 데이터로 교체
+                # 🎯 SCENARIO MODE: 타임아웃 적용 (3초) + 에러 시 시나리오 데이터로 대체
                 if scenario_mode and matched_scenario:
-                    print(f"🎯 [SCENARIO MODE] 자율제어 에이전트 응답을 시나리오 데이터로 교체합니다", file=sys.stderr, flush=True)
-                    scenario_autocontrol_result = matched_scenario.get("agent_workflow", {}).get("step_7_autocontrol_to_orchestration", {}).get("response", {}).get("result", "")
-                    if not scenario_autocontrol_result:
-                        # 대체 경로 시도
-                        scenario_autocontrol_result = matched_scenario.get("agent_workflow", {}).get("step_7_autocontrol_to_orchestration", {}).get("response", {}).get("summary", "")
-                    if not scenario_autocontrol_result:
-                        scenario_autocontrol_result = "자율제어 에이전트 응답 (시나리오 데이터 없음)"
-                    autonomous_control_agent_response = AutonomousControlAgentResponse(result=scenario_autocontrol_result)
-                    print(f"🎯 [SCENARIO MODE] 시나리오 자율제어 응답 길이: {len(scenario_autocontrol_result)} 문자", file=sys.stderr, flush=True)
+                    try:
+                        print(f"⏱️ [SCENARIO MODE] 자율제어 에이전트 호출 (3초 타임아웃)", file=sys.stderr, flush=True)
+                        autonomous_control_agent_response = await asyncio.wait_for(
+                            self._call_autonomous_control_agent(
+                                session_id=session_id,
+                                request_text=autocontrol_query_text,
+                                matched_scenario=matched_scenario
+                            ),
+                            timeout=3.0
+                        )
+                        print(f"✅ [SCENARIO MODE] 자율제어 에이전트 정상 응답", file=sys.stderr, flush=True)
+                    except asyncio.TimeoutError:
+                        print(f"⏱️ [SCENARIO MODE] 자율제어 에이전트 타임아웃 (3초) - 시나리오 데이터로 대체", file=sys.stderr, flush=True)
+                        scenario_autocontrol_result = matched_scenario.get("agent_workflow", {}).get("step_7_autocontrol_to_orchestration", {}).get("response", {}).get("result", "")
+                        if not scenario_autocontrol_result:
+                            # 대체 경로 시도
+                            scenario_autocontrol_result = matched_scenario.get("agent_workflow", {}).get("step_7_autocontrol_to_orchestration", {}).get("response", {}).get("summary", "")
+                        if not scenario_autocontrol_result:
+                            scenario_autocontrol_result = "자율제어 에이전트 응답 (시나리오 데이터 없음)"
+                        autonomous_control_agent_response = AutonomousControlAgentResponse(result=scenario_autocontrol_result)
+                        print(f"🎯 [SCENARIO MODE] 시나리오 자율제어 응답 길이: {len(scenario_autocontrol_result)} 문자", file=sys.stderr, flush=True)
+                    except Exception as e:
+                        print(f"❌ [SCENARIO MODE] 자율제어 에이전트 오류 ({str(e)}) - 시나리오 데이터로 대체", file=sys.stderr, flush=True)
+                        scenario_autocontrol_result = matched_scenario.get("agent_workflow", {}).get("step_7_autocontrol_to_orchestration", {}).get("response", {}).get("result", "")
+                        if not scenario_autocontrol_result:
+                            # 대체 경로 시도
+                            scenario_autocontrol_result = matched_scenario.get("agent_workflow", {}).get("step_7_autocontrol_to_orchestration", {}).get("response", {}).get("summary", "")
+                        if not scenario_autocontrol_result:
+                            scenario_autocontrol_result = "자율제어 에이전트 응답 (시나리오 데이터 없음)"
+                        autonomous_control_agent_response = AutonomousControlAgentResponse(result=scenario_autocontrol_result)
+                        print(f"🎯 [SCENARIO MODE] 시나리오 자율제어 응답 길이: {len(scenario_autocontrol_result)} 문자", file=sys.stderr, flush=True)
+                else:
+                    # 🆓 FREE MODE: 타임아웃 없이 실행
+                    autonomous_control_agent_response = await self._call_autonomous_control_agent(
+                        session_id=session_id,
+                        request_text=autocontrol_query_text,
+                        matched_scenario=matched_scenario
+                    )
 
                 curr_orch_prog.autonomous_control_agent_response = autonomous_control_agent_response.result
 
@@ -2313,10 +2373,24 @@ quality_requirements:
             send_step_complete(session_id, "final_response_generation", f"## 최종 답변 생성 완료\n\n{final_markdown_text}", progress=100, agent_name="orchestrator")
             print(f"✅ [ORCHESTRATE-13] Orchestration completed successfully", file=sys.stderr, flush=True)
 
+            # 실행된 Agent 목록 (영문)
+            executed_agents_en = []
+            if curr_orch_prog.monitoring_agent_response:
+                executed_agents_en.append("monitoring")
+            if curr_orch_prog.prediction_agent_response:
+                executed_agents_en.append("prediction")
+            if curr_orch_prog.autonomous_control_agent_response:
+                executed_agents_en.append("autocontrol")
+            if curr_orch_prog.compliance_data:
+                executed_agents_en.append("compliance")
+
+            # Compliance 체크 여부
+            compliance_checked = bool(curr_orch_prog.compliance_data)
+
             # 최종 응답에 session_id 및 모든 형식의 응답 포함
             final_agent_response = AgentResponse(
                 text=final_markdown_text,  # 기본값은 가장 상세한 마크다운 응답
-                tools_used=[],
+                tools_used=executed_agents_en,  # 실행된 Agent 목록
                 tool_results=[],
                 metadata={
                     "orchestration_mode": "direct_dynamic_tool",
@@ -2327,6 +2401,10 @@ quality_requirements:
                     "dynamic_tools_enabled": self.orch_tool_setup.is_dynamic_tool_enabled(),
                     "automatic_function_calling": True,
                     "final_status": "completed",
+                    # 워크플로우 및 실행 정보
+                    "workflow_type": curr_orch_prog.workflow_type,
+                    "executed_agents": executed_agents_en,
+                    "compliance_checked": compliance_checked,
                     # 각 형식별 응답 저장
                     "final_answer": final_answer_text,
                     "final_markdown": final_markdown_text,
