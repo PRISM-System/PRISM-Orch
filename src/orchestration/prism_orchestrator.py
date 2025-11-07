@@ -1865,43 +1865,67 @@ class PrismOrchestrator:
                     orch_progress=curr_orch_prog
                 )
 
-                # Compliance tool을 사용하여 안전 규정 준수 여부 검증 (3초 타임아웃)
-                compliance_request = ToolRequest(
-                    tool_name="compliance_check",
-                    parameters={
-                        "action": f"사용자 요청: {prompt}",
-                        "context": f"모니터링 결과: {curr_orch_prog.monitoring_agent_response}, 예측 결과: {curr_orch_prog.prediction_agent_response}, 자율제어 결과: {curr_orch_prog.autonomous_control_agent_response}",
-                        "user_id": user_id
-                    }
-                )
+                # 🎯 SCENARIO MODE: Compliance tool 실행 건너뛰고 시나리오 데이터 사용
+                if scenario_mode and matched_scenario:
+                    print(f"🎯 [SCENARIO MODE] Compliance check 실행 건너뛰기 - 시나리오 데이터 사용", file=sys.stderr, flush=True)
 
-                # Compliance tool 실행 (3초 타임아웃 적용)
-                compliance_tool = self.tool_registry.get_tool("compliance_check")
-                if compliance_tool:
-                    try:
-                        print(f"⏱️ [ORCHESTRATE-11] Compliance check 실행 (3초 타임아웃)", file=sys.stderr, flush=True)
-                        compliance_result = await asyncio.wait_for(
-                            compliance_tool.execute(compliance_request),
-                            timeout=3.0
-                        )
-                        if compliance_result.success:
-                            compliance_data = compliance_result.result
-                            curr_orch_prog.compliance_data = compliance_data
-                            print(f"✅ [ORCHESTRATE-11] Compliance check 정상 완료: {compliance_data}", file=sys.stderr, flush=True)
-                        else:
-                            print(f"⚠️ [ORCHESTRATE-11] Compliance check failed: {compliance_result.error_message}", file=sys.stderr, flush=True)
-                            compliance_data = {"compliance_status": "check_failed", "risk_level": "unknown"}
-                    except asyncio.TimeoutError:
-                        print(f"⏱️ [ORCHESTRATE-11] Compliance check 타임아웃 (3초) - 기본값 사용", file=sys.stderr, flush=True)
-                        compliance_data = {"compliance_status": "timeout", "risk_level": "unknown"}
-                        curr_orch_prog.compliance_data = compliance_data
-                    except Exception as e:
-                        print(f"❌ [ORCHESTRATE-11] Compliance check 오류 ({str(e)}) - 기본값 사용", file=sys.stderr, flush=True)
-                        compliance_data = {"compliance_status": "error", "risk_level": "unknown"}
-                        curr_orch_prog.compliance_data = compliance_data
+                    # 시나리오에서 compliance 데이터 추출
+                    scenario_compliance = matched_scenario.get("compliance", {})
+                    if scenario_compliance:
+                        compliance_data = scenario_compliance
+                        print(f"🎯 [SCENARIO MODE] 시나리오 Compliance 데이터 로드 완료", file=sys.stderr, flush=True)
+                    else:
+                        # 시나리오에 compliance 데이터 없으면 기본값 생성
+                        compliance_data = {
+                            "compliance_status": "compliant",
+                            "risk_level": "low",
+                            "matched_regulations": ["산업안전보건법 제38조", "전기설비기술기준 제5조"],
+                            "violations": [],
+                            "warnings": [],
+                            "recommendations": ["정기 점검 주기 준수", "안전 매뉴얼 업데이트"],
+                            "evidence": ["제어 파라미터가 안전 범위 내", "모든 규정 요구사항 충족"]
+                        }
+                        print(f"🎯 [SCENARIO MODE] 시나리오 Compliance 데이터 없음 - 기본값 생성", file=sys.stderr, flush=True)
+
+                    curr_orch_prog.compliance_data = compliance_data
+
                 else:
-                    print(f"⚠️ [ORCHESTRATE-11] Compliance tool not found", file=sys.stderr, flush=True)
-                    compliance_data = {"compliance_status": "tool_not_found", "risk_level": "unknown"}
+                    # 🆓 FREE MODE: Compliance tool 실제 실행 (3초 타임아웃)
+                    compliance_request = ToolRequest(
+                        tool_name="compliance_check",
+                        parameters={
+                            "action": f"사용자 요청: {prompt}",
+                            "context": f"모니터링 결과: {curr_orch_prog.monitoring_agent_response}, 예측 결과: {curr_orch_prog.prediction_agent_response}, 자율제어 결과: {curr_orch_prog.autonomous_control_agent_response}",
+                            "user_id": user_id
+                        }
+                    )
+
+                    compliance_tool = self.tool_registry.get_tool("compliance_check")
+                    if compliance_tool:
+                        try:
+                            print(f"🆓 [FREE MODE] Compliance check 실행 (3초 타임아웃)", file=sys.stderr, flush=True)
+                            compliance_result = await asyncio.wait_for(
+                                compliance_tool.execute(compliance_request),
+                                timeout=3.0
+                            )
+                            if compliance_result.success:
+                                compliance_data = compliance_result.result
+                                curr_orch_prog.compliance_data = compliance_data
+                                print(f"✅ [FREE MODE] Compliance check 정상 완료: {compliance_data}", file=sys.stderr, flush=True)
+                            else:
+                                print(f"⚠️ [FREE MODE] Compliance check failed: {compliance_result.error_message}", file=sys.stderr, flush=True)
+                                compliance_data = {"compliance_status": "check_failed", "risk_level": "unknown"}
+                        except asyncio.TimeoutError:
+                            print(f"⏱️ [FREE MODE] Compliance check 타임아웃 (3초) - 기본값 사용", file=sys.stderr, flush=True)
+                            compliance_data = {"compliance_status": "timeout", "risk_level": "unknown"}
+                            curr_orch_prog.compliance_data = compliance_data
+                        except Exception as e:
+                            print(f"❌ [FREE MODE] Compliance check 오류 ({str(e)}) - 기본값 사용", file=sys.stderr, flush=True)
+                            compliance_data = {"compliance_status": "error", "risk_level": "unknown"}
+                            curr_orch_prog.compliance_data = compliance_data
+                    else:
+                        print(f"⚠️ [FREE MODE] Compliance tool not found", file=sys.stderr, flush=True)
+                        compliance_data = {"compliance_status": "tool_not_found", "risk_level": "unknown"}
 
                 await self._call_platform_base(
                     orch_progress=curr_orch_prog
@@ -1981,8 +2005,26 @@ class PrismOrchestrator:
             # ===== PROCESS STAGE 4: 최종 응답 생성 (85-100%) =====
             send_step_start(session_id, "final_response_generation", "## 3단계: 최종 응답 생성\n\n모든 에이전트 결과를 종합하여 최종 응답을 생성합니다...", agent_name="orchestrator")
 
-            # 공통 컨텍스트 준비 (중복 방지를 위해 간결하게 구성)
-            context_summary = f"""
+            # 🎯 시나리오 모드에서 pre-written responses 사용 가능 여부 확인
+            use_prewritten_responses = False
+            prewritten_responses = None
+
+            if scenario_mode and matched_scenario:
+                prewritten_responses = matched_scenario.get("final_responses")
+                if prewritten_responses:
+                    use_prewritten_responses = True
+                    print(f"🎯 [SCENARIO MODE] Pre-written responses 사용 - LLM 응답 생성 건너뛰기", file=sys.stderr, flush=True)
+                else:
+                    print(f"🎯 [SCENARIO MODE] Pre-written responses 없음 - LLM 응답 생성 진행", file=sys.stderr, flush=True)
+
+            if use_prewritten_responses:
+                # 시나리오 모드에서 pre-written responses 사용
+                final_answer_text = prewritten_responses.get("final_answer", "응답 생성 중 오류 발생")
+                print(f"✅ [SCENARIO MODE] final_answer 로드 완료 (길이: {len(final_answer_text)} 문자)", file=sys.stderr, flush=True)
+            else:
+                # FREE MODE 또는 시나리오에 pre-written responses 없음 → LLM 생성
+                # 공통 컨텍스트 준비 (중복 방지를 위해 간결하게 구성)
+                context_summary = f"""
 **사용자 요청**: {curr_orch_prog.user_request}
 
 **워크플로우 타입**: {curr_orch_prog.workflow_type}
@@ -2003,37 +2045,18 @@ class PrismOrchestrator:
 
 [COMPLIANCE_DATA]
 {curr_orch_prog.compliance_data if curr_orch_prog.compliance_data else "미실행"}
-            """
+                """
 
-            # 1. final_answer 생성: 간결한 요약 (2-3문장)
-            final_answer_prompt = f"""
-            아래 오케스트레이션 결과를 바탕으로 사용자 요청에 대한 간결한 요약 답변을 2-3문장으로 작성해주세요.
-            핵심 결론만 명확하게 전달하세요.
+                # 1. final_answer 생성: 간결한 요약 (2-3문장)
+                final_answer_prompt = f"""
+                아래 오케스트레이션 결과를 바탕으로 사용자 요청에 대한 간결한 요약 답변을 2-3문장으로 작성해주세요.
+                핵심 결론만 명확하게 전달하세요.
 
-            {context_summary}
-            """
+                {context_summary}
+                """
 
-            final_answer_request = AgentInvokeRequest(
-                prompt=final_answer_prompt,
-                max_new_tokens=8192,
-                temperature=0.5,
-                stop=None,
-                use_tools=False,
-                max_tool_calls=0,
-                extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
-                user_id=user_id,
-                tool_for_use=None
-            )
-            final_answer_response = await self.llm.invoke_agent(self._agent, final_answer_request)
-            final_answer_text = final_answer_response.text.strip()
-
-            # 응답이 미완성이면 이어서 작성
-            if not self._is_response_complete(final_answer_text):
-                print(f"⚠️ [RESPONSE-1] final_answer가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
-                final_answer_text = await self._complete_llm_response(
-                    initial_response=final_answer_text,
-                    original_prompt=final_answer_prompt,
-                    max_continuations=2,
+                final_answer_request = AgentInvokeRequest(
+                    prompt=final_answer_prompt,
                     max_new_tokens=8192,
                     temperature=0.5,
                     stop=None,
@@ -2043,22 +2066,47 @@ class PrismOrchestrator:
                     user_id=user_id,
                     tool_for_use=None
                 )
+                final_answer_response = await self.llm.invoke_agent(self._agent, final_answer_request)
+                final_answer_text = final_answer_response.text.strip()
 
-            print(f"✅ [RESPONSE-1] final_answer 생성 완료 (길이: {len(final_answer_text)} 문자)", file=sys.stderr, flush=True)
+                # 응답이 미완성이면 이어서 작성
+                if not self._is_response_complete(final_answer_text):
+                    print(f"⚠️ [RESPONSE-1] final_answer가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
+                    final_answer_text = await self._complete_llm_response(
+                        initial_response=final_answer_text,
+                        original_prompt=final_answer_prompt,
+                        max_continuations=2,
+                        max_new_tokens=8192,
+                        temperature=0.5,
+                        stop=None,
+                        use_tools=False,
+                        max_tool_calls=0,
+                        extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                        user_id=user_id,
+                        tool_for_use=None
+                    )
+
+                print(f"✅ [RESPONSE-1] final_answer 생성 완료 (길이: {len(final_answer_text)} 문자)", file=sys.stderr, flush=True)
 
             # 2. final_markdown 생성: 동적 YAML 기반 구조화된 마크다운 리포트
-            # 실행된 Agent 목록 생성
-            executed_agents = []
-            if curr_orch_prog.monitoring_agent_response:
-                executed_agents.append("모니터링")
-            if curr_orch_prog.prediction_agent_response:
-                executed_agents.append("예측")
-            if curr_orch_prog.autonomous_control_agent_response:
-                executed_agents.append("자율제어")
-            if curr_orch_prog.compliance_data:
-                executed_agents.append("규정준수")
+            if use_prewritten_responses:
+                # 시나리오 모드에서 pre-written responses 사용
+                final_markdown_text = prewritten_responses.get("final_markdown", "마크다운 생성 중 오류 발생")
+                print(f"✅ [SCENARIO MODE] final_markdown 로드 완료 (길이: {len(final_markdown_text)} 문자)", file=sys.stderr, flush=True)
+            else:
+                # FREE MODE 또는 시나리오에 pre-written responses 없음 → LLM 생성
+                # 실행된 Agent 목록 생성
+                executed_agents = []
+                if curr_orch_prog.monitoring_agent_response:
+                    executed_agents.append("모니터링")
+                if curr_orch_prog.prediction_agent_response:
+                    executed_agents.append("예측")
+                if curr_orch_prog.autonomous_control_agent_response:
+                    executed_agents.append("자율제어")
+                if curr_orch_prog.compliance_data:
+                    executed_agents.append("규정준수")
 
-            final_markdown_prompt = f"""
+                final_markdown_prompt = f"""
 **작업 명세서 (YAML 형식)**
 
 ```yaml
@@ -2225,108 +2273,143 @@ quality_requirements:
 3. 마커 앞뒤로 추가 텍스트 없이 깔끔하게 종료
 """
 
-            final_markdown_request = AgentInvokeRequest(
-                prompt=final_markdown_prompt,
-                max_new_tokens=16384,  # 토큰 길이 최대화
-                temperature=0.6,
-                stop=["[END_OF_REPORT]"],  # 종료 마커에서 강제 중단
-                use_tools=False,
-                max_tool_calls=0,
-                extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
-                user_id=user_id,
-                tool_for_use=None
-            )
-            final_markdown_response = await self.llm.invoke_agent(self._agent, final_markdown_request)
-            final_markdown_text = final_markdown_response.text.strip()
+                final_markdown_request = AgentInvokeRequest(
+                    prompt=final_markdown_prompt,
+                    max_new_tokens=16384,  # 토큰 길이 최대화
+                    temperature=0.6,
+                    stop=["[END_OF_REPORT]"],  # 종료 마커에서 강제 중단
+                    use_tools=False,
+                    max_tool_calls=0,
+                    extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                    user_id=user_id,
+                    tool_for_use=None
+                )
+                final_markdown_response = await self.llm.invoke_agent(self._agent, final_markdown_request)
+                final_markdown_text = final_markdown_response.text.strip()
 
-            # 종료 마커 확인 및 제거
-            end_marker = "[END_OF_REPORT]"
-            has_end_marker = end_marker in final_markdown_text
+                # 종료 마커 확인 및 제거
+                end_marker = "[END_OF_REPORT]"
+                has_end_marker = end_marker in final_markdown_text
 
-            if has_end_marker:
-                # 종료 마커 발견 - 정상 완료
-                final_markdown_text = final_markdown_text.split(end_marker)[0].strip()
-                print(f"✅ [RESPONSE-2] final_markdown 종료 마커 확인 - 정상 완료", file=sys.stderr, flush=True)
-            else:
-                # 종료 마커 없음 - stop 토큰에서 중단되었거나 미완성
-                print(f"⚠️ [RESPONSE-2] final_markdown 종료 마커 없음 - 생성 계속 진행", file=sys.stderr, flush=True)
+                if has_end_marker:
+                    # 종료 마커 발견 - 정상 완료
+                    final_markdown_text = final_markdown_text.split(end_marker)[0].strip()
+                    print(f"✅ [RESPONSE-2] final_markdown 종료 마커 확인 - 정상 완료", file=sys.stderr, flush=True)
+                else:
+                    # 종료 마커 없음 - stop 토큰에서 중단되었거나 미완성
+                    print(f"⚠️ [RESPONSE-2] final_markdown 종료 마커 없음 - 생성 계속 진행", file=sys.stderr, flush=True)
 
-                # 응답이 미완성이면 이어서 작성 (최대 8번 재시도로 증가)
-                continuation_count = 0
-                max_continuations = 8
+                    # 응답이 미완성이면 이어서 작성 (최대 8번 재시도로 증가)
+                    continuation_count = 0
+                    max_continuations = 8
 
-                while not has_end_marker and continuation_count < max_continuations:
-                    continuation_count += 1
-                    print(f"⏳ [RESPONSE-2] final_markdown 계속 생성 중 ({continuation_count}/{max_continuations})...", file=sys.stderr, flush=True)
+                    while not has_end_marker and continuation_count < max_continuations:
+                        continuation_count += 1
+                        print(f"⏳ [RESPONSE-2] final_markdown 계속 생성 중 ({continuation_count}/{max_continuations})...", file=sys.stderr, flush=True)
 
-                    # 더 강력한 프롬프트로 종료 마커 강제
-                    continuation_prompt = f"""이전 응답:
+                        # 원본 context를 포함한 continuation 프롬프트 (에러 방지를 위해 안전하게 변수 처리)
+                        try:
+                            safe_monitoring_data = curr_orch_prog.monitoring_agent_response if curr_orch_prog.monitoring_agent_response else "미실행"
+                            safe_prediction_data = curr_orch_prog.prediction_agent_response if curr_orch_prog.prediction_agent_response else "미실행"
+                            safe_autocontrol_data = curr_orch_prog.autonomous_control_agent_response if curr_orch_prog.autonomous_control_agent_response else "미실행"
+                            safe_compliance_data = str(curr_orch_prog.compliance_data) if curr_orch_prog.compliance_data else "미실행"
+                        except Exception as e:
+                            print(f"⚠️ [RESPONSE-2] 변수 처리 오류: {str(e)} - 기본값 사용", file=sys.stderr, flush=True)
+                            safe_monitoring_data = "미실행"
+                            safe_prediction_data = "미실행"
+                            safe_autocontrol_data = "미실행"
+                            safe_compliance_data = "미실행"
+
+                        continuation_prompt = f"""당신은 산업 시스템 오케스트레이션 보고서를 작성 중입니다.
+
+**원본 요청 및 컨텍스트:**
+
+사용자 요청: {prompt}
+
+[MONITORING_DATA]
+{safe_monitoring_data}
+[/MONITORING_DATA]
+
+[PREDICTION_DATA]
+{safe_prediction_data}
+[/PREDICTION_DATA]
+
+[AUTOCONTROL_DATA]
+{safe_autocontrol_data}
+[/AUTOCONTROL_DATA]
+
+[COMPLIANCE_DATA]
+{safe_compliance_data}
+[/COMPLIANCE_DATA]
+
+**지금까지 작성된 보고서:**
 {final_markdown_text}
 
-위 내용에 이어서 보고서를 완성하고 반드시 [END_OF_REPORT] 마커로 종료하세요.
+**작업 지시:**
+위 보고서가 미완성 상태입니다. 원본 데이터([MONITORING_DATA], [PREDICTION_DATA] 등)를 참고하여 보고서를 완성하세요.
 
-**중요**: 모든 섹션을 완성했다면 즉시 [END_OF_REPORT]를 추가하세요. 이 마커가 없으면 보고서가 미완성으로 간주됩니다.
-마커 형식: [END_OF_REPORT] (정확히 이 형식으로)
+**중요 규칙:**
+1. 각 Agent 데이터는 해당 Agent 섹션에서만 사용 (중복 금지)
+2. 미실행 Agent는 섹션 생성 안 함
+3. 모든 섹션 완성 후 반드시 [END_OF_REPORT] 마커 추가
+4. 마커 형식: [END_OF_REPORT] (정확히 이 형식으로, 마지막에 한 번만)
+
+이제 보고서를 완성하고 [END_OF_REPORT] 마커로 종료하세요:
 """
 
-                    continuation_request = AgentInvokeRequest(
-                        prompt=continuation_prompt,
-                        max_new_tokens=16384,
-                        temperature=0.6,
-                        stop=["[END_OF_REPORT]"],
-                        use_tools=False,
-                        max_tool_calls=0,
-                        extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
-                        user_id=user_id,
-                        tool_for_use=None
-                    )
+                        continuation_request = AgentInvokeRequest(
+                            prompt=continuation_prompt,
+                            max_new_tokens=16384,
+                            temperature=0.6,
+                            stop=["[END_OF_REPORT]"],
+                            use_tools=False,
+                            max_tool_calls=0,
+                            extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                            user_id=user_id,
+                            tool_for_use=None
+                        )
 
-                    continuation_response = await self.llm.invoke_agent(self._agent, continuation_request)
-                    continuation_text = continuation_response.text.strip()
+                        continuation_response = await self.llm.invoke_agent(self._agent, continuation_request)
+                        continuation_text = continuation_response.text.strip()
 
-                    # 종료 마커 확인
-                    if end_marker in continuation_text:
-                        continuation_text = continuation_text.split(end_marker)[0].strip()
-                        has_end_marker = True
+                        # 종료 마커 확인
+                        if end_marker in continuation_text:
+                            continuation_text = continuation_text.split(end_marker)[0].strip()
+                            has_end_marker = True
 
-                    final_markdown_text += "\n" + continuation_text
+                        final_markdown_text += "\n" + continuation_text
 
-                if not has_end_marker:
-                    # 8번 재시도 후에도 마커 없으면 강제로 추가
-                    print(f"⚠️ [RESPONSE-2] final_markdown {max_continuations}번 재시도 후에도 종료 마커 없음 - 마커 강제 추가", file=sys.stderr, flush=True)
-                    # 마커를 강제로 추가하지 않고 현재 상태 유지 (내용은 완성되었을 가능성 있음)
+                    if not has_end_marker:
+                        # 8번 재시도 후에도 마커 없으면 강제로 추가
+                        print(f"⚠️ [RESPONSE-2] final_markdown {max_continuations}번 재시도 후에도 종료 마커 없음 - 마커 강제 추가", file=sys.stderr, flush=True)
+                        # 마커를 강제로 추가하지 않고 현재 상태 유지 (내용은 완성되었을 가능성 있음)
 
-            print(f"✅ [RESPONSE-2] final_markdown 생성 완료 (길이: {len(final_markdown_text)} 문자)", file=sys.stderr, flush=True)
+                print(f"✅ [RESPONSE-2] final_markdown 생성 완료 (길이: {len(final_markdown_text)} 문자)", file=sys.stderr, flush=True)
 
-            # 3. response 생성: 대화형 응답
-            response_prompt = f"""
-            아래 오케스트레이션 결과를 바탕으로 사용자와 대화하듯이 친근하고 이해하기 쉬운 응답을 작성해주세요.
-            전문 용어는 최소화하고, 사용자 관점에서 설명해주세요.
+            # 3. response, content, result, message 생성
+            if use_prewritten_responses:
+                # 시나리오 모드에서 pre-written responses 사용
+                response_text = prewritten_responses.get("response", "응답 생성 중 오류 발생")
+                content_text = prewritten_responses.get("content", "내용 생성 중 오류 발생")
+                result_text = prewritten_responses.get("result", "결과 생성 중 오류 발생")
+                message_text = prewritten_responses.get("message", "메시지 생성 중 오류 발생")
 
-            {context_summary}
-            """
+                print(f"✅ [SCENARIO MODE] response 로드 완료 (길이: {len(response_text)} 문자)", file=sys.stderr, flush=True)
+                print(f"✅ [SCENARIO MODE] content 로드 완료 (길이: {len(content_text)} 문자)", file=sys.stderr, flush=True)
+                print(f"✅ [SCENARIO MODE] result 로드 완료 (길이: {len(result_text)} 문자)", file=sys.stderr, flush=True)
+                print(f"✅ [SCENARIO MODE] message 로드 완료 (길이: {len(message_text)} 문자)", file=sys.stderr, flush=True)
+            else:
+                # FREE MODE 또는 시나리오에 pre-written responses 없음 → LLM 생성
+                # 3. response 생성: 대화형 응답
+                response_prompt = f"""
+                아래 오케스트레이션 결과를 바탕으로 사용자와 대화하듯이 친근하고 이해하기 쉬운 응답을 작성해주세요.
+                전문 용어는 최소화하고, 사용자 관점에서 설명해주세요.
 
-            response_request = AgentInvokeRequest(
-                prompt=response_prompt,
-                max_new_tokens=8192,
-                temperature=0.7,
-                stop=None,
-                use_tools=False,
-                max_tool_calls=0,
-                extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
-                user_id=user_id,
-                tool_for_use=None
-            )
-            response_response = await self.llm.invoke_agent(self._agent, response_request)
-            response_text = response_response.text.strip()
+                {context_summary}
+                """
 
-            # 응답이 미완성이면 이어서 작성
-            if not self._is_response_complete(response_text):
-                print(f"⚠️ [RESPONSE-3] response가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
-                response_text = await self._complete_llm_response(
-                    initial_response=response_text,
-                    original_prompt=response_prompt,
-                    max_continuations=2,
+                response_request = AgentInvokeRequest(
+                    prompt=response_prompt,
                     max_new_tokens=8192,
                     temperature=0.7,
                     stop=None,
@@ -2336,42 +2419,42 @@ quality_requirements:
                     user_id=user_id,
                     tool_for_use=None
                 )
+                response_response = await self.llm.invoke_agent(self._agent, response_request)
+                response_text = response_response.text.strip()
 
-            print(f"✅ [RESPONSE-3] response 생성 완료 (길이: {len(response_text)} 문자)", file=sys.stderr, flush=True)
+                # 응답이 미완성이면 이어서 작성
+                if not self._is_response_complete(response_text):
+                    print(f"⚠️ [RESPONSE-3] response가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
+                    response_text = await self._complete_llm_response(
+                        initial_response=response_text,
+                        original_prompt=response_prompt,
+                        max_continuations=2,
+                        max_new_tokens=8192,
+                        temperature=0.7,
+                        stop=None,
+                        use_tools=False,
+                        max_tool_calls=0,
+                        extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                        user_id=user_id,
+                        tool_for_use=None
+                    )
 
-            # 4. content 생성: 구조화된 내용 (JSON 형태의 구조화된 정보)
-            content_prompt = f"""
-            아래 오케스트레이션 결과를 바탕으로 구조화된 내용을 작성해주세요.
-            다음 정보를 포함하세요:
-            - 현재 상태
-            - 주요 발견사항
-            - 수치 데이터
-            - 조치 필요사항
+                print(f"✅ [RESPONSE-3] response 생성 완료 (길이: {len(response_text)} 문자)", file=sys.stderr, flush=True)
 
-            {context_summary}
-            """
+                # 4. content 생성: 구조화된 내용 (JSON 형태의 구조화된 정보)
+                content_prompt = f"""
+                아래 오케스트레이션 결과를 바탕으로 구조화된 내용을 작성해주세요.
+                다음 정보를 포함하세요:
+                - 현재 상태
+                - 주요 발견사항
+                - 수치 데이터
+                - 조치 필요사항
 
-            content_request = AgentInvokeRequest(
-                prompt=content_prompt,
-                max_new_tokens=8192,
-                temperature=0.5,
-                stop=None,
-                use_tools=False,
-                max_tool_calls=0,
-                extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
-                user_id=user_id,
-                tool_for_use=None
-            )
-            content_response = await self.llm.invoke_agent(self._agent, content_request)
-            content_text = content_response.text.strip()
+                {context_summary}
+                """
 
-            # 응답이 미완성이면 이어서 작성
-            if not self._is_response_complete(content_text):
-                print(f"⚠️ [RESPONSE-4] content가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
-                content_text = await self._complete_llm_response(
-                    initial_response=content_text,
-                    original_prompt=content_prompt,
-                    max_continuations=2,
+                content_request = AgentInvokeRequest(
+                    prompt=content_prompt,
                     max_new_tokens=8192,
                     temperature=0.5,
                     stop=None,
@@ -2381,37 +2464,37 @@ quality_requirements:
                     user_id=user_id,
                     tool_for_use=None
                 )
+                content_response = await self.llm.invoke_agent(self._agent, content_request)
+                content_text = content_response.text.strip()
 
-            print(f"✅ [RESPONSE-4] content 생성 완료 (길이: {len(content_text)} 문자)", file=sys.stderr, flush=True)
+                # 응답이 미완성이면 이어서 작성
+                if not self._is_response_complete(content_text):
+                    print(f"⚠️ [RESPONSE-4] content가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
+                    content_text = await self._complete_llm_response(
+                        initial_response=content_text,
+                        original_prompt=content_prompt,
+                        max_continuations=2,
+                        max_new_tokens=8192,
+                        temperature=0.5,
+                        stop=None,
+                        use_tools=False,
+                        max_tool_calls=0,
+                        extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                        user_id=user_id,
+                        tool_for_use=None
+                    )
 
-            # 5. result 생성: 핵심 결과 (1문장 결론)
-            result_prompt = f"""
-            아래 오케스트레이션 결과를 바탕으로 가장 핵심적인 결론을 1문장으로 작성해주세요.
+                print(f"✅ [RESPONSE-4] content 생성 완료 (길이: {len(content_text)} 문자)", file=sys.stderr, flush=True)
 
-            {context_summary}
-            """
+                # 5. result 생성: 핵심 결과 (1문장 결론)
+                result_prompt = f"""
+                아래 오케스트레이션 결과를 바탕으로 가장 핵심적인 결론을 1문장으로 작성해주세요.
 
-            result_request = AgentInvokeRequest(
-                prompt=result_prompt,
-                max_new_tokens=8192,
-                temperature=0.4,
-                stop=None,
-                use_tools=False,
-                max_tool_calls=0,
-                extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
-                user_id=user_id,
-                tool_for_use=None
-            )
-            result_response = await self.llm.invoke_agent(self._agent, result_request)
-            result_text = result_response.text.strip()
+                {context_summary}
+                """
 
-            # 응답이 미완성이면 이어서 작성
-            if not self._is_response_complete(result_text):
-                print(f"⚠️ [RESPONSE-5] result가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
-                result_text = await self._complete_llm_response(
-                    initial_response=result_text,
-                    original_prompt=result_prompt,
-                    max_continuations=2,
+                result_request = AgentInvokeRequest(
+                    prompt=result_prompt,
                     max_new_tokens=8192,
                     temperature=0.4,
                     stop=None,
@@ -2421,38 +2504,38 @@ quality_requirements:
                     user_id=user_id,
                     tool_for_use=None
                 )
+                result_response = await self.llm.invoke_agent(self._agent, result_request)
+                result_text = result_response.text.strip()
 
-            print(f"✅ [RESPONSE-5] result 생성 완료 (길이: {len(result_text)} 문자)", file=sys.stderr, flush=True)
+                # 응답이 미완성이면 이어서 작성
+                if not self._is_response_complete(result_text):
+                    print(f"⚠️ [RESPONSE-5] result가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
+                    result_text = await self._complete_llm_response(
+                        initial_response=result_text,
+                        original_prompt=result_prompt,
+                        max_continuations=2,
+                        max_new_tokens=8192,
+                        temperature=0.4,
+                        stop=None,
+                        use_tools=False,
+                        max_tool_calls=0,
+                        extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                        user_id=user_id,
+                        tool_for_use=None
+                    )
 
-            # 6. message 생성: 사용자 친화적 메시지
-            message_prompt = f"""
-            아래 오케스트레이션 결과를 바탕으로 사용자에게 전달할 친근한 메시지를 작성해주세요.
-            격려와 함께 다음 단계 안내를 포함하세요.
+                print(f"✅ [RESPONSE-5] result 생성 완료 (길이: {len(result_text)} 문자)", file=sys.stderr, flush=True)
 
-            {context_summary}
-            """
+                # 6. message 생성: 사용자 친화적 메시지
+                message_prompt = f"""
+                아래 오케스트레이션 결과를 바탕으로 사용자에게 전달할 친근한 메시지를 작성해주세요.
+                격려와 함께 다음 단계 안내를 포함하세요.
 
-            message_request = AgentInvokeRequest(
-                prompt=message_prompt,
-                max_new_tokens=8192,
-                temperature=0.7,
-                stop=None,
-                use_tools=False,
-                max_tool_calls=0,
-                extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
-                user_id=user_id,
-                tool_for_use=None
-            )
-            message_response = await self.llm.invoke_agent(self._agent, message_request)
-            message_text = message_response.text.strip()
+                {context_summary}
+                """
 
-            # 응답이 미완성이면 이어서 작성
-            if not self._is_response_complete(message_text):
-                print(f"⚠️ [RESPONSE-6] message가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
-                message_text = await self._complete_llm_response(
-                    initial_response=message_text,
-                    original_prompt=message_prompt,
-                    max_continuations=2,
+                message_request = AgentInvokeRequest(
+                    prompt=message_prompt,
                     max_new_tokens=8192,
                     temperature=0.7,
                     stop=None,
@@ -2462,8 +2545,27 @@ quality_requirements:
                     user_id=user_id,
                     tool_for_use=None
                 )
+                message_response = await self.llm.invoke_agent(self._agent, message_request)
+                message_text = message_response.text.strip()
 
-            print(f"✅ [RESPONSE-6] message 생성 완료 (길이: {len(message_text)} 문자)", file=sys.stderr, flush=True)
+                # 응답이 미완성이면 이어서 작성
+                if not self._is_response_complete(message_text):
+                    print(f"⚠️ [RESPONSE-6] message가 미완성입니다. 이어서 작성합니다...", file=sys.stderr, flush=True)
+                    message_text = await self._complete_llm_response(
+                        initial_response=message_text,
+                        original_prompt=message_prompt,
+                        max_continuations=2,
+                        max_new_tokens=8192,
+                        temperature=0.7,
+                        stop=None,
+                        use_tools=False,
+                        max_tool_calls=0,
+                        extra_body=extra_body if extra_body else {"chat_template_kwargs": {"enable_thinking": False}},
+                        user_id=user_id,
+                        tool_for_use=None
+                    )
+
+                print(f"✅ [RESPONSE-6] message 생성 완료 (길이: {len(message_text)} 문자)", file=sys.stderr, flush=True)
 
             # PROCESS STAGE 4 완료: 최종 응답 생성 완료 (100%)
             send_step_complete(session_id, "final_response_generation", f"## 최종 답변 생성 완료\n\n{final_markdown_text}", progress=100, agent_name="orchestrator")
