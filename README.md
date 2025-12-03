@@ -232,54 +232,110 @@ result = await workflow_manager.execute_workflow("압력_이상_대응", context
 - `agent_call`: 에이전트 호출
 - `condition`: 조건 평가
 
-## 🚀 설치 및 실행
+## 🚀 Docker Compose 실행 (기본 가정)
 
-### 1. 환경 설정
+이 프로젝트는 **Docker Compose**로 실행하는 것을 기본 전제로 합니다. 로컬 가상환경 설치 없이 컨테이너로 앱, Weaviate, 시딩/업로더 작업을 수행합니다.
 
-```bash
-# 저장소 클론
-git clone https://github.com/PRISM-System/PRISM-Orch.git
-cd PRISM-Orch
-
-# 가상환경 생성 및 활성화
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# 또는 venv\Scripts\activate  # Windows
-
-# 의존성 설치
-pip install -r requirements.txt
-```
+### 1. 사전 준비
+- Docker 24+ 및 Docker Compose 플러그인
+- 외부 네트워크 생성 (compose가 `prism-shared-network`를 사용)
+  ```bash
+  docker network create prism-shared-network
+  ```
+- PRISM-Core를 로컬로 재사용하려면 상위 디렉터리에 `prism-core/`를 클론 (`../prism-core/prism_core`가 볼륨으로 마운트됨). 없다면 `USE_LOCAL_PRISM_CORE=false`와 `PRISM_CORE_VERSION`을 `.env`에서 지정하세요.
 
 ### 2. 환경 변수 설정
-
+`cp .env.example .env` 후 필요한 값을 채웁니다(파일이 없다면 아래를 참고해 직접 작성).
 ```bash
-# .env 파일 생성
-cp .env.example .env
+PRISM_CORE_BASE_URL=http://prism-core-llm_agent-1:8000   # 기본값, 필요시 수정
+OPENAI_BASE_URL=http://localhost:8001/v1                 # vLLM(OpenAI 호환)
+OPENAI_API_KEY=EMPTY
+VLLM_MODEL=Qwen/Qwen3-14B
+WEAVIATE_PORT=18080
+USE_LOCAL_PRISM_CORE=true        # ../prism-core 사용 시 true
+PRISM_CORE_VERSION=main          # USE_LOCAL_PRISM_CORE=false인 경우 설치할 브랜치/태그
+PLATFORM_BASE_URL=               # AGI-Platform 사용 시 설정
+PLATFORM_ID=
+PLATFORM_PW=
+MONITORING_API_ENDPOINT=
+PREDICTION_API_ENDPOINT=
+AUTOCONTROL_API_ENDPOINT=
+VECTOR_ENCODER_MODEL=sentence-transformers/all-MiniLM-L6-v2
+VECTOR_DIM=384
+```
+GitHub에서 PRISM-Core를 받아야 할 때(`USE_LOCAL_PRISM_CORE=false`)는 `GITHUB_TOKEN`을 export 후 `docker compose`를 실행하세요.
 
-# 필요한 설정 수정
-PRISM_CORE_BASE_URL=http://localhost:8000
-OPENAI_BASE_URL=http://localhost:8001/v1
-VLLM_MODEL=Qwen/Qwen3-0.6B
+### 3. 서비스 기동
+필수 서비스(앱 + Weaviate + 임베딩용 t2v)를 올립니다.
+```bash
+docker compose up -d --build weaviate app t2v-transformers
+```
+- 앱: http://localhost:8100 (FastAPI)
+- Weaviate: http://localhost:18080
+
+로그 확인:
+```bash
+docker compose logs -f app
 ```
 
-### 3. PRISM-Core 서버 시작
-
+### 4. 벡터 DB 시드 및 데이터 적재 (선택)
+필요에 따라 아래 작업을 순서대로 실행합니다.
 ```bash
-# PRISM-Core 서버가 실행 중인지 확인
-curl http://localhost:8000/
+# 기본 RAG 시드
+docker compose run --rm seed
+
+# KOSHA 가이드라인 적재 (규정/컴플라이언스)
+docker compose run --rm kosha-processor
+
+# 제조 문서 적재
+docker compose run --rm manufacture-docs-processor
+
+# 에이전트 이력 적재
+docker compose run --rm agent-history-uploader
+
+# 벡터 검색 테스트
+docker compose run --rm vector-search-tester
+
+# 검색 웹 UI (http://localhost:8200)
+docker compose up -d vector-search-web
 ```
 
-### 4. PRISM-Orch 실행
-
+### 5. 종료
 ```bash
-# 개발 모드로 실행
-uv run python -m src.main
-
-# 또는 직접 실행
-uv run python src/main.py
+docker compose down
 ```
 
 ## 📖 사용법
+
+> 예제/스크립트를 실행할 때는 컨테이너 내부에서 실행합니다.  
+> `docker compose exec app uv run python example_modular_usage.py` 와 같이 사용하세요.
+
+## 🧭 코드 구조 & 핵심 모듈
+- `src/main.py`: FastAPI 진입점. 앱 라이프사이클에서 `PrismOrchestrator`를 생성해 `/api/v1/orchestrate/` 라우터에 주입합니다.
+- `src/api/endpoints/orchestration.py`: POST `/api/v1/orchestrate/` 엔드포인트. `UserQueryInput`을 받아 `orchestrator.orchestrate(...)` 호출 후 `OrchestrationResponse`로 반환.
+- `src/orchestration/prism_orchestrator.py`: 오케스트레이션 핵심. LLM 서비스/ToolRegistry/Agent/Workflow 매니저를 초기화하고 모니터링·예측·자율제어 하위 에이전트 API 호출 래퍼를 제공합니다.
+- `src/orchestration/tools/orch_tool_setup.py`: Dynamic RAG(Search, auto function calling), Compliance, Memory, Agent Interaction Summary 툴을 등록해 `ToolRegistry`를 구성.
+- `src/utils/websocket_util.py`: AGI-Platform WebSocket 업데이트 유틸리티.
+- `src/orchestration/workflow_prompts.yaml`: 쿼리 리파인, 계획 생성/검토/업데이트, 실행 루프 프롬프트 템플릿.
+
+## ⚙️ PrismOrchestrator 초기화 인자 (현재 구현 기준)
+`PrismOrchestrator`는 설정이 비어 있으면 `.env` → 기본값 순으로 채웁니다.
+
+| 인자 | 설명 | 기본값/출처 |
+| --- | --- | --- |
+| `agent_name` | 메인 오케스트레이터 에이전트 이름 | `"orchestration_agent"` |
+| `openai_base_url` | vLLM(OpenAI 호환) 엔드포인트 | `settings.OPENAI_BASE_URL` or `http://localhost:8001/v1` |
+| `api_key` | LLM API 키 | `settings.OPENAI_API_KEY` |
+| `prism_core_api_base` | PRISM-Core API 베이스 URL | `settings.PRISM_CORE_BASE_URL` (docker 기본: `http://prism-core-llm_agent-1:8000`) |
+| `platform_api_base` | AGI-Platform 베이스 URL | `settings.PLATFORM_BASE_URL` |
+| `monitoring_agent_endpoint` | 모니터링 에이전트 API | `settings.MONITORING_API_ENDPOINT` or `http://localhost:8002/api/monitoring` |
+| `prediction_agent_endpoint` | 예측 에이전트 API | `settings.PREDICTION_API_ENDPOINT` or `http://localhost:8003/api/prediction` |
+| `autonomous_control_agent_endpoint` | 자율제어 에이전트 API | `settings.AUTOCONTROL_API_ENDPOINT` or `http://localhost:8004/api/autonomous_control` |
+
+초기화 시 수행되는 주요 절차:
+- `OrchToolSetup.setup_tools()`로 Dynamic RAG/Compliance/Memory/AgentInteractionSummary 툴 생성 후 `ToolRegistry` 등록.
+- `PrismLLMService` 생성 후 모든 툴을 등록, AgentManager/WorkflowManager에 ToolRegistry 주입.
+- 설정된 프롬프트 YAML/테스트 시나리오 로드, 플랫폼 로그인 시도(자격 미설정 시 스킵), 하위 에이전트용 로컬 캐시 준비.
 
 ### 1. 기본 오케스트레이션
 
@@ -750,37 +806,3 @@ uv run python -m pytest tests/test_agent_manager.py
 # 워크플로우 테스트
 uv run python -m pytest tests/test_workflow_manager.py
 ```
-
-## 🤝 기여하기
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### 개발 가이드라인
-
-- **코드 스타일**: PEP 8 준수
-- **문서화**: 모든 함수와 클래스에 docstring 작성
-- **테스트**: 새로운 기능에 대한 테스트 코드 작성
-- **타입 힌트**: Python 타입 힌트 사용
-
-## 📄 라이선스
-
-이 프로젝트는 MIT 라이선스 하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
-
-## 🆘 지원
-
-- **이슈 리포트**: [GitHub Issues](https://github.com/PRISM-System/PRISM-Orch/issues)
-- **문서**: [Wiki](https://github.com/PRISM-System/PRISM-Orch/wiki)
-- **이메일**: support@prism-system.com
-
-## 🙏 감사의 말
-
-- [Mem0](https://github.com/mem0ai/mem0) - AI 에이전트를 위한 범용 메모리 레이어
-- [PRISM-Core](https://github.com/PRISM-System/prism-core) - 핵심 AI 인프라
-
----
-
-**PRISM-Orch** - AI 에이전트 오케스트레이션의 새로운 표준 🚀
